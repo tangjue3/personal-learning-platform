@@ -289,6 +289,11 @@ function goToToday() {
   focusDate.value = new Date(calendarNow.value)
 }
 
+function showDayInWeek(date) {
+  focusDate.value = new Date(date)
+  mode.value = '周'
+}
+
 function openNewEvent(date = focusDate.value) {
   draft.value = createEmptyDraft(date)
   draftBaseline = JSON.stringify(draft.value)
@@ -500,7 +505,7 @@ function eventGridRowEnd(event) {
           <button v-for="event in day.events.slice(0, 3)" :key="event.id" class="calendar-month-event" :class="`calendar-month-event--${categoryTone(event.category)}`" :title="`${event.start} ${event.title}`" @click="openEditEvent(event)">
             <time>{{ event.start }}</time><span>{{ event.title }}</span>
           </button>
-          <span v-if="day.events.length > 3" class="calendar-month-more">还有 {{ day.events.length - 3 }} 项</span>
+          <button v-if="day.events.length > 3" type="button" class="calendar-month-more" :aria-label="`查看 ${day.key} 的全部日程`" @click="showDayInWeek(day.date)">还有 {{ day.events.length - 3 }} 项</button>
         </article>
       </div>
     </section>
@@ -613,7 +618,8 @@ function eventGridRowEnd(event) {
 .calendar-month-event--lavender { color: #8176b4; background: #f2f0fa; }
 .calendar-month-event--mint { color: #5e907d; background: #eef6f1; }
 .calendar-month-event--peach { color: #ad8064; background: #fbf2eb; }
-.calendar-month-more { display: block; padding: 4px 5px 0; color: #9aa3af; font-size: 7px; }
+.calendar-month-more { display: block; width: 100%; padding: 4px 5px 0; border: 0; color: #7186a3; background: transparent; font: inherit; font-size: 7px; text-align: left; cursor: pointer; }
+.calendar-month-more:hover { color: #426da8; text-decoration: underline; text-underline-offset: 2px; }
 .schedule-modal-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(28,37,51,.26); backdrop-filter: blur(7px); }
 .schedule-modal { width: min(100%, 460px); max-height: min(92vh, 720px); overflow: auto; padding: 22px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: #fff; box-shadow: 0 24px 72px rgba(35,48,68,.2); }
 .schedule-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
