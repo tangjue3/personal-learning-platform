@@ -40,9 +40,21 @@ function close() {
   emit('close')
 }
 
+function isValidDateKey(value) {
+  if (!value) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+}
+
 async function save() {
   const title = draft.value.title.trim()
   if (busy.value || !title || !props.task?.id) return
+  if (!isValidDateKey(draft.value.dueDate)) {
+    error.value = '请选择有效的安排日期。'
+    return
+  }
   busy.value = true
   error.value = ''
   const { id, updatedAt, ...data } = props.task
