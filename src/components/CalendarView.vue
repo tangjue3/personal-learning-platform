@@ -1,12 +1,13 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import { getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
 const mode = ref('周')
 const focusDate = ref(new Date())
-const today = new Date()
+const calendarNow = ref(new Date())
+let clockTimer = null
 const modalOpen = ref(false)
 const formError = ref('')
 const formSaving = ref(false)
@@ -31,6 +32,10 @@ function toDateKey(date) {
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
+
+const todayKey = computed(() => toDateKey(calendarNow.value))
+onMounted(() => { clockTimer = window.setInterval(() => { calendarNow.value = new Date() }, 30_000) })
+onBeforeUnmount(() => { if (clockTimer) window.clearInterval(clockTimer) })
 
 function fromDateKey(key) {
   const [year, month, day] = key.split('-').map(Number)
@@ -164,7 +169,7 @@ const weekDays = computed(() => Array.from({ length: 7 }, (_, index) => {
     date,
     key,
     label: ['一', '二', '三', '四', '五', '六', '日'][index],
-    isToday: key === toDateKey(today),
+    isToday: key === todayKey.value,
     events: sortedEvents.value.filter((event) => event.date === key),
     taskCount: taskSummary.total,
     openTaskCount: taskSummary.open,
@@ -188,7 +193,7 @@ const monthDays = computed(() => {
       date,
       key,
       inMonth: date.getMonth() === focusDate.value.getMonth(),
-      isToday: key === toDateKey(today),
+      isToday: key === todayKey.value,
       isSelected: key === toDateKey(focusDate.value),
       events: sortedEvents.value.filter((event) => event.date === key),
       taskCount: taskSummary.total,
@@ -238,7 +243,7 @@ function movePeriod(amount) {
 }
 
 function goToToday() {
-  focusDate.value = new Date(today)
+  focusDate.value = new Date(calendarNow.value)
 }
 
 function openNewEvent(date = focusDate.value) {
