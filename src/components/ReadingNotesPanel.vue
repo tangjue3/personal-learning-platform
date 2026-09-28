@@ -1,7 +1,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import MarkdownNoteInput from './MarkdownNoteInput.vue'
 import { deleteLegacyReadingNote, listLegacyReadingNotes } from '../services/legacyEbookStore.js'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { renderNoteInline } from '../services/noteMarkdown.js'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -175,10 +177,10 @@ function formatDate(value) {
             <span>摘录</span>
             <blockquote>{{ excerpt }}</blockquote>
           </div>
-          <label class="reading-notes-field">
+          <div class="reading-notes-field">
             <span>{{ isEditing ? '编辑笔记' : '写下你的想法' }}</span>
-            <textarea v-model="content" rows="4" maxlength="8000" placeholder="记录理解、疑问或下一步行动…" />
-          </label>
+            <MarkdownNoteInput v-model="content" :rows="4" placeholder="记录理解、疑问或下一步行动…" />
+          </div>
           <label v-if="!excerpt" class="reading-notes-field reading-notes-excerpt-field">
             <span>摘录原文 <em>可选</em></span>
             <textarea v-model="excerpt" rows="2" maxlength="3000" placeholder="粘贴想稍后回看的内容" />
@@ -204,7 +206,7 @@ function formatDate(value) {
           <article v-for="note in notes" :key="note.id" class="reading-note-card" :class="`note-card-${note.color || 'yellow'}`">
             <button class="reading-note-main" type="button" @click="jumpToNote(note)">
               <span v-if="note.excerpt" class="reading-note-excerpt">{{ note.excerpt }}</span>
-              <span v-if="note.content" class="reading-note-content">{{ note.content }}</span>
+              <span v-if="note.content" class="reading-note-content" v-html="renderNoteInline(note.content)"></span>
               <span class="reading-note-location">{{ note.chapterTitle || (note.format === 'pdf' && note.anchor?.page ? `第 ${note.anchor.page} 页` : '阅读摘录') }}</span>
             </button>
             <footer>
@@ -268,6 +270,8 @@ function formatDate(value) {
 .reading-note-main:hover .reading-note-content { color: #315cb3; }
 .reading-note-excerpt { display: -webkit-box; overflow: hidden; color: #77735f; font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .reading-note-content { display: -webkit-box; overflow: hidden; color: #41454c; font-size: 12px; line-height: 1.6; white-space: pre-wrap; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.reading-note-content :deep(code) { padding: .08em .3em; border-radius: 4px; color: #536176; background: #edf0f4; font: .94em Consolas, monospace; }
+.reading-note-content :deep(.note-markdown-link) { color: #5684c7; text-decoration: underline; text-underline-offset: 2px; }
 .reading-note-location { color: #9a9da3; font-size: 10px; }
 .reading-note-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px 10px; }
 .reading-note-card footer time { color: #a2a5ab; font-size: 9px; }
