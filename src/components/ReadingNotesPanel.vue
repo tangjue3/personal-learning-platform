@@ -52,6 +52,11 @@ function resetDraft() {
   draftChapterTitle.value = props.chapterTitle
 }
 
+function closePanel() {
+  if (isSaving.value) return
+  emit('close')
+}
+
 async function refreshNotes() {
   if (!bookId.value) {
     notes.value = []
@@ -148,6 +153,7 @@ async function toggleDelete(note) {
 }
 
 function jumpToNote(note) {
+  if (isSaving.value) return
   emit('jump', note.anchor, note)
   emit('close')
 }
@@ -162,14 +168,14 @@ function formatDate(value) {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="reading-notes-scrim" @click.self="emit('close')" @keyup.esc="emit('close')">
+    <div v-if="open" class="reading-notes-scrim" @click.self="closePanel" @keyup.esc="closePanel">
       <aside class="reading-notes-panel" role="dialog" aria-modal="true" aria-labelledby="reading-notes-title">
         <header class="reading-notes-header">
           <div>
             <p>阅读摘录</p>
             <h2 id="reading-notes-title">{{ bookTitle }} 的笔记</h2>
           </div>
-          <button class="reading-notes-close" type="button" aria-label="关闭笔记" @click="emit('close')">×</button>
+          <button class="reading-notes-close" type="button" aria-label="关闭笔记" :disabled="isSaving" @click="closePanel">×</button>
         </header>
 
         <div class="reading-notes-compose">
@@ -179,18 +185,18 @@ function formatDate(value) {
           </div>
           <div class="reading-notes-field">
             <span>{{ isEditing ? '编辑笔记' : '写下你的想法' }}</span>
-            <MarkdownNoteInput v-model="content" :rows="4" placeholder="记录理解、疑问或下一步行动…" />
+            <MarkdownNoteInput v-model="content" :rows="4" placeholder="记录理解、疑问或下一步行动…" :disabled="isSaving" />
           </div>
           <label v-if="!excerpt" class="reading-notes-field reading-notes-excerpt-field">
             <span>摘录原文 <em>可选</em></span>
-            <textarea v-model="excerpt" rows="2" maxlength="3000" placeholder="粘贴想稍后回看的内容" />
+            <textarea v-model="excerpt" rows="2" maxlength="3000" placeholder="粘贴想稍后回看的内容" :disabled="isSaving" />
           </label>
           <div class="reading-notes-compose-footer">
             <div class="reading-notes-colors" role="group" aria-label="笔记标记颜色">
-              <button v-for="option in ['yellow', 'blue', 'green', 'pink']" :key="option" type="button" :class="[`note-color-${option}`, { selected: color === option }]" :aria-label="`${option} 标记`" :aria-pressed="color === option" @click="color = option" />
+              <button v-for="option in ['yellow', 'blue', 'green', 'pink']" :key="option" type="button" :class="[`note-color-${option}`, { selected: color === option }]" :aria-label="`${option} 标记`" :aria-pressed="color === option" :disabled="isSaving" @click="color = option" />
             </div>
             <div class="reading-notes-compose-actions">
-              <button v-if="isEditing" class="quiet-action" type="button" @click="cancelEdit">取消编辑</button>
+                <button v-if="isEditing" class="quiet-action" type="button" :disabled="isSaving" @click="cancelEdit">取消编辑</button>
               <button class="save-action" type="button" :disabled="isSaving || (!content.trim() && !excerpt.trim())" @click="saveNote">
                 {{ isSaving ? '保存中…' : isEditing ? '保存修改' : '保存笔记' }}
               </button>
@@ -212,8 +218,8 @@ function formatDate(value) {
             <footer>
               <time :datetime="note.updatedAt">{{ formatDate(note.updatedAt) }}</time>
               <div>
-                <button type="button" @click="editNote(note)">编辑</button>
-                <button type="button" class="delete-note-action" @click="toggleDelete(note)">
+                <button type="button" :disabled="isSaving" @click="editNote(note)">编辑</button>
+                <button type="button" class="delete-note-action" :disabled="isSaving" @click="toggleDelete(note)">
                   {{ confirmDeleteId === note.id ? '再点一次删除' : '删除' }}
                 </button>
               </div>
@@ -256,6 +262,7 @@ function formatDate(value) {
 .reading-notes-colors { display: flex; align-items: center; gap: 7px; }
 .reading-notes-colors button { width: 17px; height: 17px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #dadddf; cursor: pointer; }
 .reading-notes-colors button.selected { box-shadow: 0 0 0 2px #727881; }
+.reading-notes-colors button:disabled, .reading-notes-compose-actions button:disabled, .reading-notes-close:disabled, .reading-note-card footer button:disabled { cursor: wait; opacity: .55; }
 .note-color-yellow { background: #e9d98e; }.note-color-blue { background: #a9c6ea; }.note-color-green { background: #afd1b8; }.note-color-pink { background: #edbdc7; }
 .reading-notes-compose-actions { display: flex; gap: 8px; }
 .reading-notes-compose-actions button { height: 33px; padding: 0 11px; border: 0; border-radius: 9px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; }

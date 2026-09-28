@@ -6,6 +6,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   rows: { type: Number, default: 6 },
   placeholder: { type: String, default: '写下笔记…' },
+  disabled: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 const mode = ref('edit')
@@ -16,8 +17,8 @@ const previewHtml = computed(() => renderNoteMarkdown(props.modelValue))
   <div class="markdown-note-editor">
     <div class="markdown-note-toolbar">
       <div role="group" aria-label="笔记显示模式">
-        <button type="button" :class="{ selected: mode === 'edit' }" :aria-pressed="mode === 'edit'" @click="mode = 'edit'">编辑</button>
-        <button type="button" :class="{ selected: mode === 'preview' }" :aria-pressed="mode === 'preview'" @click="mode = 'preview'">预览</button>
+        <button type="button" :class="{ selected: mode === 'edit' }" :aria-pressed="mode === 'edit'" :disabled="disabled" @click="mode = 'edit'">编辑</button>
+        <button type="button" :class="{ selected: mode === 'preview' }" :aria-pressed="mode === 'preview'" :disabled="disabled" @click="mode = 'preview'">预览</button>
       </div>
       <span>支持标题、列表、引用与代码</span>
     </div>
@@ -26,6 +27,7 @@ const previewHtml = computed(() => renderNoteMarkdown(props.modelValue))
       :value="modelValue"
       :rows="rows"
       :placeholder="placeholder"
+      :disabled="disabled"
       @input="emit('update:modelValue', $event.target.value)"
     ></textarea>
     <div v-else class="markdown-note-preview">

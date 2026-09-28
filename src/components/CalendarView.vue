@@ -552,12 +552,12 @@ function eventGridRowEnd(event) {
           <button class="icon-button" aria-label="关闭" :disabled="formSaving" @click="closeModal"><Icon name="close" size="18" /></button>
         </header>
         <form class="schedule-form" @submit.prevent="saveEvent">
-          <label class="schedule-field schedule-field--full"><span>日程标题</span><input v-model.trim="draft.title" autofocus required maxlength="80" placeholder="例如：阅读 RAG 工程学习手册" /></label>
-          <label class="schedule-field schedule-field--full"><span>日期</span><input v-model="draft.date" required type="date" /></label>
-          <label class="schedule-field"><span>开始时间</span><input v-model="draft.start" required type="time" step="1800" /></label>
-          <label class="schedule-field"><span>结束时间</span><input v-model="draft.end" required type="time" step="1800" /></label>
-          <label class="schedule-field schedule-field--full"><span>分类</span><select v-model="draft.category"><option v-for="category in categories" :key="category.label" :value="category.label">{{ category.label }}</option></select></label>
-          <label class="schedule-field schedule-field--full"><span>关联学习书籍 <small>可选</small></span><select v-model="draft.bookId"><option value="">暂不关联</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label>
+          <label class="schedule-field schedule-field--full"><span>日程标题</span><input v-model.trim="draft.title" autofocus required maxlength="80" placeholder="例如：阅读 RAG 工程学习手册" :disabled="formSaving" /></label>
+          <label class="schedule-field schedule-field--full"><span>日期</span><input v-model="draft.date" required type="date" :disabled="formSaving" /></label>
+          <label class="schedule-field"><span>开始时间</span><input v-model="draft.start" required type="time" step="1800" :disabled="formSaving" /></label>
+          <label class="schedule-field"><span>结束时间</span><input v-model="draft.end" required type="time" step="1800" :disabled="formSaving" /></label>
+          <label class="schedule-field schedule-field--full"><span>分类</span><select v-model="draft.category" :disabled="formSaving"><option v-for="category in categories" :key="category.label" :value="category.label">{{ category.label }}</option></select></label>
+          <label class="schedule-field schedule-field--full"><span>关联学习书籍 <small>可选</small></span><select v-model="draft.bookId" :disabled="formSaving"><option value="">暂不关联</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label>
           <p v-if="formError" class="schedule-form-error" role="alert">{{ formError }}</p>
           <footer class="schedule-form-actions">
             <button v-if="isEditing" type="button" class="schedule-delete-button" :disabled="formSaving" @click="deleteEvent">删除日程</button>
