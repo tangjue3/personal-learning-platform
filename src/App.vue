@@ -12,6 +12,7 @@ import { listEbookFiles } from './services/ebookFileStore.js'
 import { listPendingEbooks, runEbookMigration } from './services/ebookMigration.js'
 import { getLocalRecord, getLocalRecords, localDataState, refreshLocalDataState } from './services/localDataStore.js'
 import { loadRepositoryBooks } from './services/repositoryLibrary.js'
+import { isReviewDue } from './services/reviewSchedule.js'
 
 const EbookReaderView = defineAsyncComponent(() => import('./components/EbookReaderView.vue'))
 
@@ -42,7 +43,7 @@ const recentBooks = computed(() => [...books.value]
   .slice(0, 2))
 const dueReviewCount = computed(() => {
   const now = reviewClock.value
-  return getLocalRecords('review').filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= now).length
+  return getLocalRecords('review').filter((card) => isReviewDue(card, now)).length
 })
 
 watch(() => localDataState.events, updatePrivateProgress, { deep: true })

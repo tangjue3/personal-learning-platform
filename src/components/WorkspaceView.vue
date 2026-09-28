@@ -1,7 +1,8 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import { deleteLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { isReviewDue } from '../services/reviewSchedule.js'
 
 const props = defineProps({ kind: { type: String, required: true }, books: { type: Array, default: () => [] } })
 const emit = defineEmits(['open-note'])
@@ -23,6 +24,11 @@ const sessionIds = ref([])
 const sessionPosition = ref(0)
 const reviewClock = ref(Date.now())
 const cardFrontField = ref(null)
+let reviewClockTimer = null
+onMounted(() => {
+  if (props.kind === 'review') reviewClockTimer = window.setInterval(() => { reviewClock.value = Date.now() }, 30_000)
+})
+onBeforeUnmount(() => { if (reviewClockTimer) window.clearInterval(reviewClockTimer) })
 
 function emptyNote() { return { id: '', title: '', content: '', excerpt: '', tags: '', bookId: '', chapterId: '', chapterTitle: '', anchor: null, format: '', color: 'yellow', createdAt: '' } }
 function normalizeTags(value) {
@@ -48,10 +54,8 @@ const visibleNotes = computed(() => {
     return (!query || searchable.includes(query)) && (!selectedTag.value || tags.includes(selectedTag.value))
   })
 })
-const dueCards = computed(() => {
-  reviewClock.value
-  return cards.value.filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= Date.now())
-})
+const dueCards = computed(() => cards.value.filter((card) => isReviewDue(card, reviewClock.value)))
+function isCardDue(card) { return isReviewDue(card, reviewClock.value) }
 const activeCard = computed(() => cards.value.find((card) => card.id === sessionIds.value[sessionPosition.value]) || null)
 const sessionDone = computed(() => sessionIds.value.length > 0 && sessionPosition.value >= sessionIds.value.length)
 const noteChapters = computed(() => props.books.find((book) => book.id === noteDraft.value.bookId)?.documents || [])
@@ -291,7 +295,7 @@ defineExpose({ startReview, focusNewCard: startNewCard })
           <template v-else-if="sessionDone"><h2>这一轮复习完成</h2><p>记录已保存。再次进入复习时会按计划出现。</p><button class="button button-secondary" @click="startReview">检查新到期卡片</button></template>
           <template v-else><h2>{{ dueCards.length ? '准备好开始了吗？' : '今天没有到期卡片' }}</h2><p>{{ dueCards.length ? '有 ' + dueCards.length + ' 张卡片等你回忆。' : cards.length ? '共有 ' + cards.length + ' 张卡片，下一次复习时间：' + formatDate(cards.reduce((earliest, card) => !earliest || card.dueAt < earliest ? card.dueAt : earliest, '')) + '。' : '从课程笔记创建卡片，或手动制作一张。' }}</p><button v-if="dueCards.length" class="button button-primary" @click="startReview"><Icon name="play" size="15" /> 开始复习</button></template>
         </article>
-        <article class="review-count-card surface-card"><span class="section-kicker">知识卡片</span><div class="review-count-number">{{ dueCards.length }}<span> 张待复习</span></div><div class="review-summary"><span>总卡片数</span><strong>{{ cards.length }}</strong></div><div class="review-summary"><span>已安排后续复习</span><strong>{{ cards.filter((card) => card.dueAt && new Date(card.dueAt).getTime() > Date.now()).length }} 张</strong></div></article>
+        <article class="review-count-card surface-card"><span class="section-kicker">知识卡片</span><div class="review-count-number">{{ dueCards.length }}<span> 张待复习</span></div><div class="review-summary"><span>总卡片数</span><strong>{{ cards.length }}</strong></div><div class="review-summary"><span>已安排后续复习</span><strong>{{ cards.filter((card) => !isReviewDue(card, reviewClock.value)).length }} 张</strong></div></article>
       </section>
       <p v-if="reviewError" class="workspace-error" role="alert">{{ reviewError }}</p>
       <section class="card-editor surface-card">
@@ -299,7 +303,7 @@ defineExpose({ startReview, focusNewCard: startNewCard })
         <div class="card-editor-fields"><label><span>正面 · 回忆问题</span><textarea ref="cardFrontField" v-model="cardDraft.front" rows="2" :disabled="reviewBusy" placeholder="例如：RAG 中重排解决什么问题？"></textarea></label><label><span>背面 · 参考答案</span><textarea v-model="cardDraft.back" rows="3" :disabled="reviewBusy" placeholder="写下关键概念或自己的解释"></textarea></label><label><span>关联书籍</span><select v-model="cardDraft.bookId" :disabled="reviewBusy"><option value="">不关联书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label v-if="cardChapters.length"><span>章节</span><select v-model="cardDraft.chapterId" :disabled="reviewBusy"><option value="">未指定章节</option><option v-for="chapter in cardChapters" :key="chapter.id" :value="chapter.id">{{ chapter.title }}</option></select></label></div>
         <div class="card-editor-actions"><button v-if="isEditingCard" type="button" class="button button-secondary" :disabled="reviewBusy" @click="cancelCardEdit">取消修改</button><button class="button button-primary" :disabled="reviewBusy" @click="saveCard"><Icon :name="isEditingCard ? 'check' : 'plus'" size="15" /> {{ reviewBusy ? '正在保存…' : isEditingCard ? '保存修改' : '添加卡片' }}</button></div>
       </section>
-      <section v-if="cards.length" class="review-card-list"><div class="section-heading-row"><div><span class="section-kicker">全部卡片</span><h2>复习队列</h2></div></div><article v-for="card in cards" :key="card.id" class="review-list-row surface-card"><div><strong>{{ card.front }}</strong><span>{{ bookName(card.bookId) || '未关联书籍' }}<template v-if="chapterName(card.bookId, card.chapterId)"> · {{ chapterName(card.bookId, card.chapterId) }}</template></span></div><span class="review-due-pill" :class="{ 'is-due': !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() }">{{ !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() ? '待复习' : formatDate(card.dueAt) }}</span><button class="icon-button" :aria-label="`编辑复习卡片：${card.front}`" :disabled="reviewBusy" @click="editCard(card)"><Icon name="edit" size="15" /></button><button class="icon-button" :aria-label="`删除复习卡片：${card.front}`" :disabled="reviewBusy" @click="removeCard(card)"><Icon name="trash" size="15" /></button></article></section>
+      <section v-if="cards.length" class="review-card-list"><div class="section-heading-row"><div><span class="section-kicker">全部卡片</span><h2>复习队列</h2></div></div><article v-for="card in cards" :key="card.id" class="review-list-row surface-card"><div><strong>{{ card.front }}</strong><span>{{ bookName(card.bookId) || '未关联书籍' }}<template v-if="chapterName(card.bookId, card.chapterId)"> · {{ chapterName(card.bookId, card.chapterId) }}</template></span></div><span class="review-due-pill" :class="{ 'is-due': isCardDue(card) }">{{ isCardDue(card) ? '待复习' : formatDate(card.dueAt) }}</span><button class="icon-button" :aria-label="`编辑复习卡片：${card.front}`" :disabled="reviewBusy" @click="editCard(card)"><Icon name="edit" size="15" /></button><button class="icon-button" :aria-label="`删除复习卡片：${card.front}`" :disabled="reviewBusy" @click="removeCard(card)"><Icon name="trash" size="15" /></button></article></section>
     </template>
 
     <div v-if="editorOpen" class="workspace-modal-backdrop" @click.self="closeEditor">

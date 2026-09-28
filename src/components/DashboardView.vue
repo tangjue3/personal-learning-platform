@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import BookCover from './BookCover.vue'
 import Icon from './Icon.vue'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { isReviewDue } from '../services/reviewSchedule.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
 const emit = defineEmits(['open-reader', 'open-calendar', 'open-shelf', 'start-review', 'create-review-card'])
@@ -49,7 +50,7 @@ const tasks = computed(() => getLocalRecords('task')
 const reviewCards = computed(() => getLocalRecords('review'))
 const dueReviewCards = computed(() => {
   const now = currentTime.value.getTime()
-  return reviewCards.value.filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= now)
+  return reviewCards.value.filter((card) => isReviewDue(card, now))
 })
 const dueReviewCount = computed(() => dueReviewCards.value.length)
 const week = computed(() => {
