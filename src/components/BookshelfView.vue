@@ -547,14 +547,14 @@ async function importCourse() {
 
     <div v-if="managedBook" class="importer-backdrop" @click.self="closeManagement">
       <section class="importer-dialog management-dialog" role="dialog" aria-modal="true" aria-labelledby="management-title">
-        <header class="importer-header"><div><span class="importer-kicker">书籍管理</span><h2 id="management-title">{{ managedBook.repositoryManaged ? '编辑书籍信息' : isManagedEbook ? '编辑本机电子书' : '整理旧版课程' }}</h2><p v-if="managedBook.repositoryManaged">更新书架展示信息，章节原文不会被改动。</p><p v-else-if="isManagedEbook">电子书原文件保存在本机目录 data/local/ebooks/，阅读记录保存在 data/local/records.json。</p><p v-else>这门课程还只保存在当前浏览器。迁移后会写入本机课程仓库。</p></div><button class="importer-close" aria-label="关闭书籍管理" @click="closeManagement">×</button></header>
+        <header class="importer-header"><div><span class="importer-kicker">书籍管理</span><h2 id="management-title">{{ managedBook.repositoryManaged ? '编辑书籍信息' : isManagedEbook ? '编辑本机电子书' : '整理旧版课程' }}</h2><p v-if="managedBook.repositoryManaged">更新书架展示信息，章节原文不会被改动。</p><p v-else-if="isManagedEbook">电子书原文件保存在本机目录 data/local/ebooks/，阅读记录保存在 data/local/records.json。</p><p v-else>这门课程还只保存在当前浏览器。迁移后会写入本机课程仓库。</p></div><button class="importer-close" aria-label="关闭书籍管理" :disabled="managementBusy" @click="closeManagement">×</button></header>
         <div class="management-fields">
-          <label class="importer-field"><span>书名</span><input v-model="managementDraft.title" maxlength="100" /></label>
-          <label v-if="isManagedEbook" class="importer-field"><span>作者 <small>可选</small></span><input v-model="managementDraft.author" maxlength="120" /></label>
+          <label class="importer-field"><span>书名</span><input v-model="managementDraft.title" maxlength="100" :disabled="managementBusy" /></label>
+          <label v-if="isManagedEbook" class="importer-field"><span>作者 <small>可选</small></span><input v-model="managementDraft.author" maxlength="120" :disabled="managementBusy" /></label>
           <template v-else>
-            <label class="importer-field"><span>副标题</span><input v-model="managementDraft.subtitle" maxlength="140" /></label>
-            <label class="importer-field"><span>书架分类</span><select v-model="managementDraft.category"><option v-for="category in categories" :key="category">{{ category }}</option></select></label>
-            <label class="importer-field"><span>封面色系</span><select v-model="managementDraft.theme"><option value="blue">雾蓝</option><option value="sand">暖沙</option><option value="night">深夜</option><option value="sky">晴空</option><option value="peach">蜜桃</option><option value="mist">薄雾</option><option value="forest">森林</option></select></label>
+            <label class="importer-field"><span>副标题</span><input v-model="managementDraft.subtitle" maxlength="140" :disabled="managementBusy" /></label>
+            <label class="importer-field"><span>书架分类</span><select v-model="managementDraft.category" :disabled="managementBusy"><option v-for="category in categories" :key="category">{{ category }}</option></select></label>
+            <label class="importer-field"><span>封面色系</span><select v-model="managementDraft.theme" :disabled="managementBusy"><option value="blue">雾蓝</option><option value="sand">暖沙</option><option value="night">深夜</option><option value="sky">晴空</option><option value="peach">蜜桃</option><option value="mist">薄雾</option><option value="forest">森林</option></select></label>
           </template>
         </div>
         <div v-if="confirmBookDelete" class="management-confirm"><strong>确定移除《{{ managedBook.title }}》？</strong><p v-if="managedBook.repositoryManaged">课程文件会从仓库中删除；与它关联的私人笔记和复习卡会保留，但不再显示书名。</p><p v-else-if="isManagedEbook">电子书原文件会从本机目录 data/local/ebooks/ 中删除；阅读进度也会删除，已保存的笔记和复习卡会保留。</p><p v-else>课程会从当前浏览器的本地书架移除。</p><div><button class="button button-secondary" :disabled="managementBusy" @click="confirmBookDelete = false">返回</button><button class="button button-danger" :disabled="managementBusy" @click="removeManagedBook">{{ managementBusy ? '正在删除…' : '确认删除' }}</button></div></div>
