@@ -3,14 +3,16 @@ import { spawn } from 'node:child_process'
 import { randomUUID, createHash } from 'node:crypto'
 import { createWriteStream, createReadStream } from 'node:fs'
 import { Transform, pipeline } from 'node:stream'
-import { open, readdir, readFile, writeFile, mkdir, rename, rm, stat, realpath } from 'node:fs/promises'
+import { open, readdir, readFile, writeFile, mkdir, rename, rm, stat, realpath, lstat, link, copyFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const localRecordsPath = join(root, 'data', 'local', 'records.json')
-const ebooksRoot = join(root, 'data', 'local', 'ebooks')
+const localDataRoot = join(root, 'data', 'local')
+const localRecordsPath = join(localDataRoot, 'records.json')
+const localBackupsRoot = join(localDataRoot, 'backups')
+const ebooksRoot = join(localDataRoot, 'ebooks')
 const distDirectory = join(root, 'dist')
 const maximumBodyBytes = 32 * 1024 * 1024
 const maximumEbookBytes = 512 * 1024 * 1024
@@ -18,6 +20,8 @@ const bookIdPattern = /^[a-zA-Z0-9._-]{1,120}$/
 const ebookFormats = new Set(['epub', 'pdf'])
 const ebookMediaTypes = new Map([['epub', 'application/epub+zip'], ['pdf', 'application/pdf']])
 const allowedRecordKinds = new Set(['reader', 'calendar', 'note', 'task', 'review', 'preference'])
+const localBackupIdPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/
+const maximumLocalBackups = 30
 const runtime = { syncing: false, writing: false, queuedWrites: 0 }
 let repositoryWriteQueue = Promise.resolve()
 const isApiOnly = process.argv.includes('--api-only')
@@ -200,12 +204,14 @@ async function appendLocalEvents(body) {
       .map((event) => `${event.kind}:${event.entityId}`))
     const additions = importedEvents.filter((event) => !existingIdentities.has(`${event.kind}:${event.entityId}`))
     const skipped = importedEvents.length - additions.length
+    let preRestoreBackup = null
     if (additions.length) {
+      preRestoreBackup = await createLocalBackup('before-restore')
       events.push(...additions)
       const compactedEvents = compactLocalEvents(events)
       await atomicWrite(localRecordsPath, `${JSON.stringify({ version: 1, events: compactedEvents }, null, 2)}\n`)
     }
-    return { imported: additions.length, skipped }
+    return { imported: additions.length, skipped, preRestoreBackupId: preRestoreBackup?.id || null }
   })
 }
 
@@ -227,6 +233,293 @@ async function withRepositoryWrite(operation) {
   }
 }
 
+function isValidLocalRecordEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)
+    || typeof event.id !== 'string' || !event.id
+    || typeof event.changedAt !== 'string' || !Number.isFinite(Date.parse(event.changedAt))) return false
+  if (event.operation === 'delete' && event.data !== null) return false
+  if (!['upsert', 'delete'].includes(event.operation)) return false
+  try {
+    validateRecordInput(event)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function cloneLocalTree(source, destination, totals = { files: 0, bytes: 0 }) {
+  const sourceInfo = await lstat(source)
+  if (sourceInfo.isSymbolicLink() || !sourceInfo.isDirectory()) throw new Error('本机快照目录包含不受支持的链接。')
+  const entries = await readdir(source, { withFileTypes: true })
+
+  await mkdir(destination, { recursive: true })
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) throw new Error('本机快照不能包含符号链接。')
+    const sourcePath = join(source, entry.name)
+    const targetPath = join(destination, entry.name)
+    if (entry.isDirectory()) {
+      await cloneLocalTree(sourcePath, targetPath, totals)
+      continue
+    }
+    if (!entry.isFile()) throw new Error('本机快照目录包含不支持的文件类型。')
+
+    try { await link(sourcePath, targetPath) }
+    catch { await copyFile(sourcePath, targetPath) }
+    const fileInfo = await stat(sourcePath)
+    totals.files += 1
+    totals.bytes += fileInfo.size
+  }
+  return totals
+}
+
+async function cloneLocalEbooks(source, destination) {
+  let sourceInfo
+  try { sourceInfo = await lstat(source) }
+  catch (error) {
+    if (error.code === 'ENOENT') {
+      await mkdir(destination, { recursive: true })
+      return { ebookCount: 0, files: 0, bytes: 0 }
+    }
+    throw error
+  }
+  if (sourceInfo.isSymbolicLink() || !sourceInfo.isDirectory()) throw new Error('本机电子书目录不是有效的普通目录。')
+  await mkdir(destination, { recursive: true })
+  const entries = await readdir(source, { withFileTypes: true })
+
+  const totals = { ebookCount: 0, files: 0, bytes: 0 }
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) throw new Error('电子书目录不能包含符号链接。')
+    if (!entry.isDirectory() || entry.name.startsWith('.') || !bookIdPattern.test(entry.name)) continue
+    await cloneLocalTree(join(source, entry.name), join(destination, entry.name), totals)
+    totals.ebookCount += 1
+  }
+  return totals
+}
+
+async function listLocalBackups() {
+  let entries
+  try { entries = await readdir(localBackupsRoot, { withFileTypes: true }) }
+  catch (error) {
+    if (error.code === 'ENOENT') return []
+    throw error
+  }
+
+  const backups = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || !localBackupIdPattern.test(entry.name)) continue
+    try {
+      const manifestPath = join(localBackupsRoot, entry.name, 'manifest.json')
+      const manifestInfo = await lstat(manifestPath)
+      if (manifestInfo.isSymbolicLink() || !manifestInfo.isFile()) continue
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      if (manifest?.format !== 'zhixu-local-snapshot' || manifest.version !== 1 || manifest.id !== entry.name) continue
+      backups.push({
+        id: manifest.id,
+        createdAt: manifest.createdAt,
+        reason: manifest.reason,
+        recordsValid: manifest.recordsValid === true,
+        recordCount: Number.isInteger(manifest.recordCount) && manifest.recordCount >= 0 ? manifest.recordCount : null,
+        ebookCount: Number.isInteger(manifest.ebookCount) && manifest.ebookCount >= 0 ? manifest.ebookCount : 0,
+        ebookBytes: Number.isFinite(manifest.ebookBytes) ? manifest.ebookBytes : 0,
+      })
+    } catch {
+      // 忽略未完成或损坏的快照目录；它不会影响本机数据读取。
+    }
+  }
+  return backups.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+}
+
+async function pruneLocalBackups(protectedIds = []) {
+  const backups = await listLocalBackups()
+  const protectedSet = new Set(protectedIds)
+  const protectedBackups = backups.filter((backup) => protectedSet.has(backup.id))
+  const remainingSlots = Math.max(0, maximumLocalBackups - protectedBackups.length)
+  const retained = new Set([
+    ...protectedBackups.map((backup) => backup.id),
+    ...backups.filter((backup) => !protectedSet.has(backup.id)).slice(0, remainingSlots).map((backup) => backup.id),
+  ])
+  for (const backup of backups) {
+    if (retained.has(backup.id)) continue
+    await rm(join(localBackupsRoot, backup.id), { recursive: true, force: true })
+  }
+}
+
+async function createLocalBackup(reason = 'manual', { allowInvalidRecords = false, protectedIds = [] } = {}) {
+  if (!['manual', 'automatic', 'before-restore'].includes(reason)) throw fail(400, '本机快照类型不受支持。')
+  let recordsBuffer
+  try { recordsBuffer = await readFile(localRecordsPath) }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    recordsBuffer = Buffer.from(`${JSON.stringify({ version: 1, events: [] }, null, 2)}\n`)
+  }
+
+  let recordPayload = null
+  try { recordPayload = JSON.parse(recordsBuffer.toString('utf8')) } catch { /* Mark invalid below. */ }
+  const recordsValid = recordPayload?.version === 1 && Array.isArray(recordPayload.events)
+    && recordPayload.events.every(isValidLocalRecordEvent)
+  if (!recordsValid && !allowInvalidRecords) throw fail(500, '本机记录文件格式异常，未创建快照。')
+  const compactedEvents = recordsValid ? compactLocalEvents(recordPayload.events) : []
+  const recordCount = recordsValid ? compactedEvents.filter((event) => event.operation === 'upsert').length : null
+
+  const createdAt = new Date().toISOString()
+  const id = `${createdAt.replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`
+  const stagingDirectory = join(localBackupsRoot, `.pending-${id}`)
+  const snapshotDirectory = join(localBackupsRoot, id)
+  await mkdir(localBackupsRoot, { recursive: true })
+  await mkdir(stagingDirectory)
+  try {
+    await writeFile(join(stagingDirectory, 'records.json'), recordsBuffer, { flag: 'wx' })
+    const ebookTotals = await cloneLocalEbooks(ebooksRoot, join(stagingDirectory, 'ebooks'))
+    const manifest = {
+      format: 'zhixu-local-snapshot',
+      version: 1,
+      id,
+      createdAt,
+      reason,
+      recordsValid,
+      recordCount,
+      ebookCount: ebookTotals.ebookCount,
+      ebookFiles: ebookTotals.files,
+      ebookBytes: ebookTotals.bytes,
+    }
+    await writeFile(join(stagingDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+    await rename(stagingDirectory, snapshotDirectory)
+  } catch (error) {
+    await rm(stagingDirectory, { recursive: true, force: true }).catch(() => {})
+    throw error
+  }
+  await pruneLocalBackups(protectedIds).catch((error) => console.warn('清理过期本机快照失败。', error))
+  return JSON.parse(await readFile(join(snapshotDirectory, 'manifest.json'), 'utf8'))
+}
+
+async function readLocalBackup(id) {
+  if (!localBackupIdPattern.test(String(id))) throw fail(400, '本机快照标识不正确。')
+  const backups = await listLocalBackups()
+  const backup = backups.find((item) => item.id === id)
+  if (!backup) throw fail(404, '没有找到这份本机快照。')
+  if (!backup.recordsValid) throw fail(400, '这份快照中的个人记录文件无法验证，不能用于恢复。')
+  return {
+    ...backup,
+    directory: join(localBackupsRoot, id),
+    recordsPath: join(localBackupsRoot, id, 'records.json'),
+    ebooksPath: join(localBackupsRoot, id, 'ebooks'),
+  }
+}
+
+async function validateLocalBackupEbooks(backup) {
+  let entries
+  try { entries = await readdir(backup.ebooksPath, { withFileTypes: true }) }
+  catch (error) {
+    if (error.code === 'ENOENT') throw fail(400, '快照缺少电子书目录。')
+    throw error
+  }
+  let ebookCount = 0
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || !bookIdPattern.test(entry.name)) throw fail(400, '快照中的电子书目录不合法。')
+    const directory = join(backup.ebooksPath, entry.name)
+    const metadataPath = join(directory, 'book.json')
+    const metadataInfo = await lstat(metadataPath).catch(() => null)
+    if (!metadataInfo?.isFile() || metadataInfo.isSymbolicLink()) throw fail(400, '快照中的电子书信息文件不合法。')
+    const metadata = await readEbookMetadata(directory).catch(() => null)
+    if (!metadata || metadata.bookId !== entry.name) throw fail(400, '快照中的电子书信息不完整。')
+    const sourcePath = join(directory, `source.${metadata.format}`)
+    const fileInfo = await lstat(sourcePath).catch(() => null)
+    if (!fileInfo) throw fail(400, '快照中的电子书原文件缺失。')
+    if (fileInfo.isSymbolicLink()) throw fail(400, '快照中的电子书原文件不能是符号链接。')
+    if (!fileInfo.isFile() || fileInfo.size !== metadata.size) throw fail(400, '快照中的电子书文件大小不一致。')
+    await assertEbookSignature(sourcePath, metadata.format)
+    if (metadata.checksum) {
+      if (!/^[a-f0-9]{64}$/i.test(metadata.checksum) || await digestLocalFile(sourcePath) !== metadata.checksum.toLowerCase()) {
+        throw fail(400, '快照中的电子书 SHA-256 校验失败。')
+      }
+    }
+    ebookCount += 1
+  }
+  if (ebookCount !== backup.ebookCount) throw fail(400, '快照中的电子书数量与清单不一致。')
+}
+
+async function digestLocalFile(filePath) {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk)
+  return hash.digest('hex')
+}
+
+async function restoreLocalBackupSnapshot(id) {
+  const backup = await readLocalBackup(id)
+  let recordsPayload
+  let recordsBuffer
+  try {
+    const recordsInfo = await lstat(backup.recordsPath)
+    if (recordsInfo.isSymbolicLink() || !recordsInfo.isFile()) throw new Error('records file is not a regular file')
+    recordsBuffer = await readFile(backup.recordsPath)
+    recordsPayload = JSON.parse(recordsBuffer.toString('utf8'))
+  } catch { throw fail(400, '快照中的个人记录文件无法读取。') }
+  if (recordsPayload?.version !== 1 || !Array.isArray(recordsPayload.events)
+    || !recordsPayload.events.every(isValidLocalRecordEvent)) throw fail(400, '快照中的个人记录格式不合法。')
+  await validateLocalBackupEbooks(backup)
+
+  const safetyBackup = await createLocalBackup('before-restore', { allowInvalidRecords: true, protectedIds: [id] })
+  const stagingDirectory = join(localDataRoot, `.restore-${randomUUID()}`)
+  const rollbackDirectory = join(localDataRoot, `.rollback-${randomUUID()}`)
+  let recordsMoved = false
+  let ebooksMoved = false
+  let recordsInstalled = false
+  let ebooksInstalled = false
+  let preserveRollbackDirectory = false
+  try {
+    await mkdir(stagingDirectory, { recursive: true })
+    await mkdir(rollbackDirectory, { recursive: true })
+    await writeFile(join(stagingDirectory, 'records.json'), recordsBuffer, { flag: 'wx' })
+    await cloneLocalEbooks(backup.ebooksPath, join(stagingDirectory, 'ebooks'))
+    if (existsSync(localRecordsPath)) {
+      await rename(localRecordsPath, join(rollbackDirectory, 'records.json'))
+      recordsMoved = true
+    }
+    if (existsSync(ebooksRoot)) {
+      await rename(ebooksRoot, join(rollbackDirectory, 'ebooks'))
+      ebooksMoved = true
+    }
+    await rename(join(stagingDirectory, 'records.json'), localRecordsPath)
+    recordsInstalled = true
+    await rename(join(stagingDirectory, 'ebooks'), ebooksRoot)
+    ebooksInstalled = true
+  } catch (error) {
+    if (recordsInstalled) await rm(localRecordsPath, { force: true }).catch(() => {})
+    if (ebooksInstalled) await rm(ebooksRoot, { recursive: true, force: true }).catch(() => {})
+    let rollbackFailed = false
+    if (recordsMoved) {
+      try { await rename(join(rollbackDirectory, 'records.json'), localRecordsPath) }
+      catch { rollbackFailed = true }
+    }
+    if (ebooksMoved) {
+      try { await rename(join(rollbackDirectory, 'ebooks'), ebooksRoot) }
+      catch { rollbackFailed = true }
+    }
+    if (rollbackFailed) {
+      preserveRollbackDirectory = true
+      console.error(`本机快照恢复回滚未完成，原始数据保留在 ${rollbackDirectory}`)
+      throw fail(500, `快照恢复失败，回滚数据暂存在 data/local/${basename(rollbackDirectory)}，请勿删除。`)
+    }
+    throw error
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true }).catch(() => {})
+    if (!preserveRollbackDirectory) await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
+  }
+  return {
+    restored: true,
+    recordCount: compactLocalEvents(recordsPayload.events).filter((event) => event.operation === 'upsert').length,
+    ebookCount: backup.ebookCount,
+    preRestoreBackupId: safetyBackup.id,
+  }
+}
+
+async function ensureDailyLocalBackup() {
+  if (!existsSync(localRecordsPath) && !existsSync(ebooksRoot)) return null
+  const backups = await listLocalBackups()
+  const newest = backups[0]
+  if (newest && Date.now() - Date.parse(newest.createdAt) < 24 * 60 * 60 * 1000) return newest
+  return withRepositoryWrite(() => createLocalBackup('automatic'))
+}
 function naturalCompare(a, b) {
   return new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' }).compare(a, b)
 }
@@ -722,7 +1015,6 @@ async function importEbookBook(request, params) {
   await mkdir(temporaryDirectory, { recursive: true })
   const target = join(temporaryDirectory, `source.${format}`)
 
-  let metadata
   try {
     const written = await writeEbookStream(request, target, maximumEbookBytes)
     if (!written.size) throw fail(400, '电子书文件是空的，请重新选择文件。')
@@ -733,39 +1025,44 @@ async function importEbookBook(request, params) {
       throw fail(400, '电子书文件在传输过程中校验失败，请重新导入。')
     }
     await assertEbookSignature(target, format)
-    if (existsSync(join(ebooksRoot, bookId))) {
-      throw failWith(409, '这本电子书刚刚已被导入，请刷新书架后查看。', { duplicateBookId: bookId })
-    }
     // 判重以服务端自己算出的 SHA-256 为准：客户端可以不传校验值，
     // 文件先落盘到临时目录，发现重复再删掉，不会留下残留。
-    const sameContent = existing.find((book) => book.checksum && book.checksum === written.digest)
-    if (sameContent) {
-      throw failWith(409, `这本文件已经在书架中：${sameContent.title}。`, {
-        duplicateBookId: sameContent.bookId,
-        duplicateBookTitle: sameContent.title,
-      })
-    }
-    const now = new Date().toISOString()
-    metadata = {
-      bookId,
-      title,
-      author,
-      format,
-      fileName,
-      mediaType: ebookMediaTypes.get(format),
-      size: written.size,
-      checksum: written.digest,
-      importedAt: now,
-      updatedAt: now,
-      source: 'local',
-    }
-    await writeFile(join(temporaryDirectory, 'book.json'), `${JSON.stringify(metadata, null, 2)}\n`, { flag: 'wx' })
-    await rename(temporaryDirectory, join(ebooksRoot, bookId))
+    const metadata = await withRepositoryWrite(async () => {
+      const currentBooks = await listEbookBooks()
+      const duplicateIdentity = currentBooks.find((book) => book.bookId === bookId)
+      if (duplicateIdentity || existsSync(join(ebooksRoot, bookId))) {
+        throw failWith(409, `《${duplicateIdentity?.title || title}》已经保存在本机书架中。`, { duplicateBookId: bookId })
+      }
+      const sameContent = currentBooks.find((book) => book.checksum && book.checksum === written.digest)
+      if (sameContent) {
+        throw failWith(409, `这本文件已经在书架中：${sameContent.title}。`, {
+          duplicateBookId: sameContent.bookId,
+          duplicateBookTitle: sameContent.title,
+        })
+      }
+      const now = new Date().toISOString()
+      const newMetadata = {
+        bookId,
+        title,
+        author,
+        format,
+        fileName,
+        mediaType: ebookMediaTypes.get(format),
+        size: written.size,
+        checksum: written.digest,
+        importedAt: now,
+        updatedAt: now,
+        source: 'local',
+      }
+      await writeFile(join(temporaryDirectory, 'book.json'), `${JSON.stringify(newMetadata, null, 2)}\n`, { flag: 'wx' })
+      await rename(temporaryDirectory, join(ebooksRoot, bookId))
+      return newMetadata
+    })
+    return metadata
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {})
     throw error
   }
-  return metadata
 }
 
 async function updateEbookBook(bookId, body) {
@@ -1003,6 +1300,27 @@ async function handleApi(request, response, url) {
     return true
   }
 
+  if (pathname === '/api/local/backups' && request.method === 'GET') {
+    assertLocalBrowser(request, { requireClientHeader: true })
+    json(response, 200, { backups: await listLocalBackups() })
+    return true
+  }
+
+  if (pathname === '/api/local/backups' && request.method === 'POST') {
+    assertLocalBrowser(request, { requireClientHeader: true })
+    const backup = await withRepositoryWrite(() => createLocalBackup('manual'))
+    json(response, 201, { backup })
+    return true
+  }
+
+  const localBackupRoute = pathname.match(/^\/api\/local\/backups\/([0-9TZ-]+-[a-f0-9]{8})\/restore$/)
+  if (localBackupRoute && request.method === 'POST') {
+    assertLocalBrowser(request, { requireClientHeader: true })
+    const result = await withRepositoryWrite(() => restoreLocalBackupSnapshot(localBackupRoute[1]))
+    json(response, 200, result)
+    return true
+  }
+
   if (pathname === '/api/ebooks' && request.method === 'GET') {
     assertLocalBrowser(request)
     json(response, 200, { books: await listEbookBooks() })
@@ -1024,13 +1342,13 @@ async function handleApi(request, response, url) {
   }
   if (ebookRoute && request.method === 'PATCH') {
     assertLocalBrowser(request, { requireClientHeader: true })
-    const book = await updateEbookBook(ebookRoute[1], await readJson(request))
+    const book = await withRepositoryWrite(async () => updateEbookBook(ebookRoute[1], await readJson(request)))
     json(response, 200, { book })
     return true
   }
   if (ebookRoute && request.method === 'DELETE') {
     assertLocalBrowser(request, { requireClientHeader: true })
-    await deleteEbookBook(ebookRoute[1])
+    await withRepositoryWrite(() => deleteEbookBook(ebookRoute[1]))
     json(response, 200, { deleted: true })
     return true
   }
@@ -1060,6 +1378,9 @@ async function handleApi(request, response, url) {
 
 const contentTypes = new Map([
   ['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'],
+  // PDF.js 的 worker 是 .mjs；缺少这一项会被当成 application/octet-stream，
+  // 浏览器会拒绝动态 import，正式模式下 PDF 无法打开。
+  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'], ['.svg', 'image/svg+xml'], ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'],
   ['.woff2', 'font/woff2'], ['.ico', 'image/x-icon'],
@@ -1119,7 +1440,12 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`知序本机服务已启动：http://127.0.0.1:${port}`)
-    if (isApiOnly) console.log('API 模式：课程接口与本机个人数据接口已就绪。')
+  if (isApiOnly) console.log('API 模式：课程接口与本机个人数据接口已就绪。')
+  void ensureDailyLocalBackup().catch((error) => console.warn('本机自动快照暂未完成。', error))
+  const backupTimer = setInterval(() => {
+    void ensureDailyLocalBackup().catch((error) => console.warn('本机自动快照暂未完成。', error))
+  }, 24 * 60 * 60 * 1000)
+  backupTimer.unref()
 })
 
 server.on('error', (error) => {

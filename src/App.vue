@@ -20,6 +20,9 @@ const returnPage = ref('shelf')
 const activeBook = ref(null)
 const activeAnchor = ref(null)
 const bookshelfView = ref(null)
+const workspaceView = ref(null)
+const reviewClock = ref(Date.now())
+let reviewClockTimer = null
 
 const navigation = [
   { id: 'today', label: '今天', icon: 'today' },
@@ -37,16 +40,21 @@ const searchShortcut = computed(() => /Mac|iPhone|iPad/.test(navigator.platform 
 const recentBooks = computed(() => [...books.value]
   .sort((a, b) => Number(Boolean(b.lastRead)) - Number(Boolean(a.lastRead)) || b.progress - a.progress)
   .slice(0, 2))
-const dueReviewCount = computed(() => getLocalRecords('review').filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= Date.now()).length)
+const dueReviewCount = computed(() => {
+  const now = reviewClock.value
+  return getLocalRecords('review').filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= now).length
+})
 
 watch(() => localDataState.events, updatePrivateProgress, { deep: true })
 
 onMounted(async () => {
+  reviewClockTimer = window.setInterval(() => { reviewClock.value = Date.now() }, 30_000)
   await refreshLocalDataState()
   await reloadRepositoryBooks()
   window.addEventListener('zhixu:sync-complete', reloadRepositoryBooks)
   // 迁移（含书架上的“重试迁移”）完成后刷新书架条目，去掉“待迁移”标记。
   window.addEventListener('zhixu:ebooks-migrated', refreshEbookShelf)
+  window.addEventListener('zhixu:local-backup-restored', refreshEbooksAfterBackupRestore)
   window.addEventListener('keydown', handleGlobalShortcut)
 
   try {
@@ -62,8 +70,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (reviewClockTimer) window.clearInterval(reviewClockTimer)
   window.removeEventListener('zhixu:sync-complete', reloadRepositoryBooks)
   window.removeEventListener('zhixu:ebooks-migrated', refreshEbookShelf)
+  window.removeEventListener('zhixu:local-backup-restored', refreshEbooksAfterBackupRestore)
   window.removeEventListener('keydown', handleGlobalShortcut)
 })
 
@@ -135,6 +145,11 @@ async function refreshEbookShelf() {
   updatePrivateProgress()
 }
 
+async function refreshEbooksAfterBackupRestore() {
+  books.value = books.value.filter((book) => !['epub', 'pdf'].includes(book.format))
+  await refreshEbookShelf()
+}
+
 async function migrateEbookFiles() {
   await runEbookMigration()
   updatePrivateProgress()
@@ -143,6 +158,16 @@ async function migrateEbookFiles() {
 function navigate(page) {
   currentPage.value = page
   if (page === 'shelf') void reloadRepositoryBooks()
+}
+
+function startReviewFromDashboard() {
+  currentPage.value = 'review'
+  nextTick(() => workspaceView.value?.startReview())
+}
+
+function createReviewCardFromDashboard() {
+  currentPage.value = 'review'
+  nextTick(() => workspaceView.value?.focusNewCard())
 }
 
 function openGlobalSearch() {
@@ -268,10 +293,10 @@ function returnFromReader() {
       </header>
 
       <div class="page-scroller">
-        <DashboardView v-if="currentPage === 'today'" :books="books" @open-reader="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" />
+        <DashboardView v-if="currentPage === 'today'" :books="books" @open-reader="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" @start-review="startReviewFromDashboard" @create-review-card="createReviewCardFromDashboard" />
         <BookshelfView v-else-if="currentPage === 'shelf'" ref="bookshelfView" :books="books" @open-book="openBook" @book-imported="addBook" @book-removed="removeBook" />
         <CalendarView v-else-if="currentPage === 'calendar'" :books="books" />
-        <WorkspaceView v-else-if="currentPage === 'notes' || currentPage === 'review'" :kind="currentPage" :books="books" @open-note="openNoteLocation" />
+        <WorkspaceView v-else-if="currentPage === 'notes' || currentPage === 'review'" ref="workspaceView" :kind="currentPage" :books="books" @open-note="openNoteLocation" />
       </div>
     </section>
 

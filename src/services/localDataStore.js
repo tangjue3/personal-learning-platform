@@ -131,6 +131,21 @@ export async function importLocalEvents(events) {
   return payload
 }
 
+export async function listLocalBackups() {
+  const payload = await request('/api/local/backups')
+  return Array.isArray(payload.backups) ? payload.backups : []
+}
+
+export async function createLocalBackup() {
+  const payload = await request('/api/local/backups', { method: 'POST', body: '{}' })
+  return payload.backup
+}
+
+export async function restoreLocalBackup(id) {
+  if (typeof id !== 'string' || !id) throw new Error('请选择有效的本机快照。')
+  return request(`/api/local/backups/${encodeURIComponent(id)}/restore`, { method: 'POST', body: '{}' })
+}
+
 export async function synchronizeCourses() {
   const payload = await request('/api/sync', { method: 'POST', body: '{}' })
   await refreshLocalDataState()
