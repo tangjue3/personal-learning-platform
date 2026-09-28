@@ -17,6 +17,7 @@ const reviewBusy = ref(false)
 const noteDraft = ref(emptyNote())
 let noteDraftBaseline = ''
 const cardDraft = ref(emptyCard())
+let cardDraftBaseline = JSON.stringify(cardDraft.value)
 const reviewStage = ref('question')
 const sessionIds = ref([])
 const sessionPosition = ref(0)
@@ -55,6 +56,8 @@ const activeCard = computed(() => cards.value.find((card) => card.id === session
 const sessionDone = computed(() => sessionIds.value.length > 0 && sessionPosition.value >= sessionIds.value.length)
 const noteChapters = computed(() => props.books.find((book) => book.id === noteDraft.value.bookId)?.documents || [])
 const cardChapters = computed(() => props.books.find((book) => book.id === cardDraft.value.bookId)?.documents || [])
+const cardDraftDirty = computed(() => JSON.stringify(cardDraft.value) !== cardDraftBaseline)
+const isEditingCard = computed(() => Boolean(cardDraft.value.id))
 
 function openNewNote() {
   noteDraft.value = emptyNote()
@@ -167,25 +170,70 @@ async function rateCard(rating) {
   catch (error) { reviewError.value = error.message }
   finally { reviewBusy.value = false }
 }
+function replaceCardDraft(next = emptyCard()) {
+  cardDraft.value = next
+  cardDraftBaseline = JSON.stringify(next)
+}
 function startNewCard() {
+  if (reviewBusy.value) return
+  if (cardDraftDirty.value && !window.confirm('当前卡片有未保存的修改，确定放弃并新建吗？')) return
+  replaceCardDraft()
   reviewError.value = ''
   nextTick(() => cardFrontField.value?.focus())
 }
+function editCard(card) {
+  if (reviewBusy.value) return
+  if (cardDraftDirty.value && !window.confirm('当前卡片有未保存的修改，确定切换到这张卡片吗？')) return
+  replaceCardDraft({ ...emptyCard(), ...card })
+  reviewError.value = ''
+  nextTick(() => cardFrontField.value?.focus())
+}
+function cancelCardEdit() {
+  if (reviewBusy.value) return
+  if (cardDraftDirty.value && !window.confirm('确定放弃这张卡片的未保存修改吗？')) return
+  replaceCardDraft()
+  reviewError.value = ''
+}
 async function saveCard() {
+  if (reviewBusy.value) return
   if (!cardDraft.value.front.trim() || !cardDraft.value.back.trim()) { reviewError.value = '请填写问题和答案。'; return }
   reviewBusy.value = true; reviewError.value = ''
   const id = cardDraft.value.id || makeId()
-  const { id: ignoredId, ...data } = cardDraft.value
+  const { id: ignoredId, updatedAt: ignoredUpdatedAt, ...data } = cardDraft.value
+  const latestCard = cards.value.find((card) => card.id === id)
+  const latestSchedule = latestCard ? {
+    dueAt: latestCard.dueAt,
+    intervalDays: latestCard.intervalDays,
+    repetitions: latestCard.repetitions,
+    easeFactor: latestCard.easeFactor,
+    lastReviewedAt: latestCard.lastReviewedAt,
+  } : {}
   try {
-    await saveLocalRecord('review', id, { ...data, front: data.front.trim(), back: data.back.trim(), createdAt: new Date().toISOString() })
-    cardDraft.value = emptyCard()
+    await saveLocalRecord('review', id, {
+      ...data,
+      ...latestSchedule,
+      front: data.front.trim(),
+      back: data.back.trim(),
+      createdAt: data.createdAt || new Date().toISOString(),
+    })
+    replaceCardDraft()
   } catch (error) { reviewError.value = error.message }
   finally { reviewBusy.value = false }
 }
 async function removeCard(card) {
-  if (!window.confirm('确定删除这张复习卡片吗？')) return
-  try { await deleteLocalRecord('review', card.id) }
-  catch (error) { reviewError.value = error.message }
+  if (reviewBusy.value) return
+  const editingThisCard = isEditingCard.value && cardDraft.value.id === card.id
+  const warning = editingThisCard && cardDraftDirty.value
+    ? '这张卡片有未保存的修改。确定连同修改一起删除吗？'
+    : '确定删除这张复习卡片吗？'
+  if (!window.confirm(warning)) return
+  reviewBusy.value = true
+  reviewError.value = ''
+  try {
+    await deleteLocalRecord('review', card.id)
+    if (editingThisCard) replaceCardDraft()
+  } catch (error) { reviewError.value = error.message }
+  finally { reviewBusy.value = false }
 }
 function bookName(bookId) { return props.books.find((book) => book.id === bookId)?.title || '' }
 function chapterName(bookId, chapterId) {
@@ -204,7 +252,7 @@ defineExpose({ startReview, focusNewCard: startNewCard })
     <header class="page-heading">
       <div><span class="eyebrow-label"><span class="eyebrow-line"></span>{{ kind === 'notes' ? '学习中的每个发现' : '用回忆巩固理解' }}</span><h1>{{ kind === 'notes' ? '我的笔记' : '复习计划' }}</h1><p>{{ kind === 'notes' ? '把课程中的想法和重点，整理成自己的知识。' : '按间隔复习知识卡片，记住真正重要的内容。' }}</p></div>
       <button v-if="kind === 'notes'" class="button button-primary" @click="openNewNote"><Icon name="plus" size="17" /> 新建笔记</button>
-      <button v-else class="button button-primary" @click="startNewCard"><Icon name="plus" size="17" /> 新建卡片</button>
+      <button v-else class="button button-primary" :disabled="reviewBusy" @click="startNewCard"><Icon name="plus" size="17" /> 新建卡片</button>
     </header>
     <template v-if="kind === 'notes'">
             <section class="notes-toolbar surface-card">
@@ -247,11 +295,11 @@ defineExpose({ startReview, focusNewCard: startNewCard })
       </section>
       <p v-if="reviewError" class="workspace-error" role="alert">{{ reviewError }}</p>
       <section class="card-editor surface-card">
-        <div class="section-heading-row"><div><span class="section-kicker">新建知识卡片</span><h2>问题与答案</h2></div></div>
-        <div class="card-editor-fields"><label><span>正面 · 回忆问题</span><textarea ref="cardFrontField" v-model="cardDraft.front" rows="2" placeholder="例如：RAG 中重排解决什么问题？"></textarea></label><label><span>背面 · 参考答案</span><textarea v-model="cardDraft.back" rows="3" placeholder="写下关键概念或自己的解释"></textarea></label><label><span>关联书籍</span><select v-model="cardDraft.bookId"><option value="">不关联书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label v-if="cardChapters.length"><span>章节</span><select v-model="cardDraft.chapterId"><option value="">未指定章节</option><option v-for="chapter in cardChapters" :key="chapter.id" :value="chapter.id">{{ chapter.title }}</option></select></label></div>
-        <button class="button button-primary" :disabled="reviewBusy" @click="saveCard"><Icon name="plus" size="15" /> 添加卡片</button>
+        <div class="section-heading-row"><div><span class="section-kicker">{{ isEditingCard ? '编辑知识卡片' : '新建知识卡片' }}</span><h2>{{ isEditingCard ? '修改问题与答案' : '问题与答案' }}</h2></div><span v-if="isEditingCard" class="card-edit-hint">修改题面不会重置复习安排</span></div>
+        <div class="card-editor-fields"><label><span>正面 · 回忆问题</span><textarea ref="cardFrontField" v-model="cardDraft.front" rows="2" :disabled="reviewBusy" placeholder="例如：RAG 中重排解决什么问题？"></textarea></label><label><span>背面 · 参考答案</span><textarea v-model="cardDraft.back" rows="3" :disabled="reviewBusy" placeholder="写下关键概念或自己的解释"></textarea></label><label><span>关联书籍</span><select v-model="cardDraft.bookId" :disabled="reviewBusy"><option value="">不关联书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label v-if="cardChapters.length"><span>章节</span><select v-model="cardDraft.chapterId" :disabled="reviewBusy"><option value="">未指定章节</option><option v-for="chapter in cardChapters" :key="chapter.id" :value="chapter.id">{{ chapter.title }}</option></select></label></div>
+        <div class="card-editor-actions"><button v-if="isEditingCard" type="button" class="button button-secondary" :disabled="reviewBusy" @click="cancelCardEdit">取消修改</button><button class="button button-primary" :disabled="reviewBusy" @click="saveCard"><Icon :name="isEditingCard ? 'check' : 'plus'" size="15" /> {{ reviewBusy ? '正在保存…' : isEditingCard ? '保存修改' : '添加卡片' }}</button></div>
       </section>
-      <section v-if="cards.length" class="review-card-list"><div class="section-heading-row"><div><span class="section-kicker">全部卡片</span><h2>复习队列</h2></div></div><article v-for="card in cards" :key="card.id" class="review-list-row surface-card"><div><strong>{{ card.front }}</strong><span>{{ bookName(card.bookId) || '未关联书籍' }}<template v-if="chapterName(card.bookId, card.chapterId)"> · {{ chapterName(card.bookId, card.chapterId) }}</template></span></div><span class="review-due-pill" :class="{ 'is-due': !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() }">{{ !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() ? '待复习' : formatDate(card.dueAt) }}</span><button class="icon-button" aria-label="删除复习卡片" @click="removeCard(card)"><Icon name="trash" size="15" /></button></article></section>
+      <section v-if="cards.length" class="review-card-list"><div class="section-heading-row"><div><span class="section-kicker">全部卡片</span><h2>复习队列</h2></div></div><article v-for="card in cards" :key="card.id" class="review-list-row surface-card"><div><strong>{{ card.front }}</strong><span>{{ bookName(card.bookId) || '未关联书籍' }}<template v-if="chapterName(card.bookId, card.chapterId)"> · {{ chapterName(card.bookId, card.chapterId) }}</template></span></div><span class="review-due-pill" :class="{ 'is-due': !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() }">{{ !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() ? '待复习' : formatDate(card.dueAt) }}</span><button class="icon-button" :aria-label="`编辑复习卡片：${card.front}`" :disabled="reviewBusy" @click="editCard(card)"><Icon name="edit" size="15" /></button><button class="icon-button" :aria-label="`删除复习卡片：${card.front}`" :disabled="reviewBusy" @click="removeCard(card)"><Icon name="trash" size="15" /></button></article></section>
     </template>
 
     <div v-if="editorOpen" class="workspace-modal-backdrop" @click.self="closeEditor">
@@ -298,6 +346,9 @@ defineExpose({ startReview, focusNewCard: startNewCard })
 .card-editor { margin-top: 14px; padding: 18px; }
 .card-editor .section-heading-row { margin-bottom: 14px; }
 .card-editor .section-heading-row h2, .review-card-list .section-heading-row h2 { margin: 5px 0 0; color: #39475b; font-size: 14px; }
+.card-edit-hint { color: #8b98a8; font-size: 9px; }
+.card-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.card-editor-actions .button:disabled { opacity: .55; cursor: wait; }
 .card-editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 13px; }
 .card-editor-fields label, .workspace-field { display: grid; gap: 6px; color: #687589; font-size: 9px; font-weight: 600; }
 .card-editor-fields textarea, .card-editor-fields select, .workspace-field input, .workspace-field textarea, .workspace-field select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #e5e9ee; border-radius: 8px; outline: 0; color: #47566a; background: #fff; font: inherit; font-size: 10px; line-height: 1.6; resize: vertical; }
@@ -306,6 +357,7 @@ defineExpose({ startReview, focusNewCard: startNewCard })
 .review-card-list .section-heading-row { margin-bottom: 9px; }
 .review-list-row { display: flex; align-items: center; gap: 12px; margin-top: 7px; padding: 10px 12px; }
 .review-list-row > div { min-width: 0; display: grid; flex: 1; gap: 4px; }
+.review-list-row > .icon-button:disabled { opacity: .45; cursor: wait; }
 .review-list-row > div strong { overflow: hidden; color: #586679; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .review-list-row > div span { color: #9aa4b1; font-size: 8px; }
 .review-due-pill { padding: 5px 7px; border-radius: 7px; color: #8995a5; background: #f2f4f7; font-size: 8px; white-space: nowrap; }
