@@ -1,44 +1,67 @@
 const DATABASE_NAME = 'zhixu-learning-library'
-const DATABASE_VERSION = 1
 const BOOKS_STORE = 'books'
 
-let databasePromise
-
-function openLibraryDatabase() {
-  if (typeof indexedDB === 'undefined') {
-    return Promise.reject(new Error('当前浏览器不支持本地课程存储。'))
+async function libraryDatabaseExists() {
+  if (typeof indexedDB === 'undefined') return false
+  if (typeof indexedDB.databases !== 'function') return null
+  try {
+    const databases = await indexedDB.databases()
+    return databases.some((entry) => entry?.name === DATABASE_NAME)
+  } catch {
+    return null
   }
-
-  if (!databasePromise) {
-    databasePromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-
-      request.onupgradeneeded = () => {
-        const database = request.result
-        if (!database.objectStoreNames.contains(BOOKS_STORE)) {
-          database.createObjectStore(BOOKS_STORE, { keyPath: 'id' })
-        }
-      }
-      request.onsuccess = () => {
-        request.result.onversionchange = () => request.result.close()
-        resolve(request.result)
-      }
-      request.onerror = () => reject(request.error || new Error('无法打开本地课程书架。'))
-      request.onblocked = () => reject(new Error('课程书架正在更新，请关闭其他页面后重试。'))
-    }).catch((error) => {
-      databasePromise = undefined
-      throw error
-    })
-  }
-
-  return databasePromise
 }
 
-function requestResult(request) {
+function discardEmptyLibraryDatabase() {
+  try {
+    const request = indexedDB.deleteDatabase(DATABASE_NAME)
+    request.onerror = () => { /* Cleanup only; the empty database contains no user data. */ }
+    request.onblocked = () => { /* Another tab may hold it open; it remains empty. */ }
+  } catch { /* Best effort cleanup. */ }
+}
+
+async function openExistingLibraryDatabase() {
+  if (typeof indexedDB === 'undefined') return null
+  if (await libraryDatabaseExists() === false) return null
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error || new Error('课程内容保存失败。'))
+    let createdEmptyDatabase = false
+    const request = indexedDB.open(DATABASE_NAME)
+
+    request.onupgradeneeded = (event) => {
+      // Opening a missing legacy database creates an empty one; do not add a
+      // store or keep that database around for new users.
+      if (event.oldVersion === 0) createdEmptyDatabase = true
+    }
+    request.onsuccess = () => {
+      const database = request.result
+      database.onversionchange = () => database.close()
+      if (createdEmptyDatabase) {
+        database.close()
+        discardEmptyLibraryDatabase()
+        resolve(null)
+        return
+      }
+      if (!database.objectStoreNames.contains(BOOKS_STORE)) {
+        database.close()
+        reject(new Error('旧版课程书架格式不受支持。'))
+        return
+      }
+      resolve(database)
+    }
+    request.onerror = () => reject(request.error || new Error('无法读取旧版课程书架。'))
+    request.onblocked = () => reject(new Error('旧版课程书架正在更新，请关闭其他页面后重试。'))
   })
+}
+
+async function runInLibraryStore(mode, operation) {
+  const database = await openExistingLibraryDatabase()
+  if (!database) return null
+  try {
+    const transaction = database.transaction(BOOKS_STORE, mode)
+    return await transactionResult(transaction, operation(transaction.objectStore(BOOKS_STORE)))
+  } finally {
+    database.close()
+  }
 }
 
 function transactionResult(transaction, request) {
@@ -52,32 +75,13 @@ function transactionResult(transaction, request) {
   })
 }
 
-/** Load imported course books from local storage. */
+/** Read old browser-imported books only so the user can move them into content/books. */
 export async function listImportedBooks() {
-  const database = await openLibraryDatabase()
-  const transaction = database.transaction(BOOKS_STORE, 'readonly')
-  const rows = await requestResult(transaction.objectStore(BOOKS_STORE).getAll())
-  return rows.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''))
+  const rows = await runInLibraryStore('readonly', (store) => store.getAll())
+  return (rows || []).sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''))
 }
 
-/** Save a book in the same shape a future Agent/API adapter can provide. */
-export async function saveImportedBook(book) {
-  const database = await openLibraryDatabase()
-  const transaction = database.transaction(BOOKS_STORE, 'readwrite')
-  await transactionResult(transaction, transaction.objectStore(BOOKS_STORE).put(book))
-  return book
-}
-
-/** Retrieve one imported book, including its Markdown documents. */
-export async function getImportedBook(id) {
-  const database = await openLibraryDatabase()
-  const transaction = database.transaction(BOOKS_STORE, 'readonly')
-  return requestResult(transaction.objectStore(BOOKS_STORE).get(id))
-}
-
-/** Remove an imported book from this browser's local library. */
+/** Delete a legacy row only after a successful move into content/books. */
 export async function deleteImportedBook(id) {
-  const database = await openLibraryDatabase()
-  const transaction = database.transaction(BOOKS_STORE, 'readwrite')
-  await transactionResult(transaction, transaction.objectStore(BOOKS_STORE).delete(id))
+  await runInLibraryStore('readwrite', (store) => store.delete(id))
 }

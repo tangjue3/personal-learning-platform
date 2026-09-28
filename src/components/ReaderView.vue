@@ -9,7 +9,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['back', 'progress'])
 
-const storageKey = computed(() => `zhixu-reader:v1:${encodeURIComponent(String(props.book.id || props.book.title || 'untitled'))}`)
+const legacyStorageKey = computed(() => `zhixu-reader:v1:${encodeURIComponent(String(props.book.id || props.book.title || 'untitled'))}`)
 const chapters = computed(() => {
   const documents = Array.isArray(props.book.documents) ? props.book.documents : []
   return documents
@@ -25,9 +25,9 @@ const chapters = computed(() => {
 })
 const hasDocuments = computed(() => Array.isArray(props.book.documents) && props.book.documents.length > 0)
 
-function readSavedState() {
+function readLegacyBrowserState() {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value) || 'null')
+    const saved = JSON.parse(localStorage.getItem(legacyStorageKey.value) || 'null')
     if (!saved || typeof saved !== 'object') return null
     return {
       chapterId: typeof saved.chapterId === 'string' ? saved.chapterId : null,
@@ -44,7 +44,7 @@ function readSavedState() {
   }
 }
 
-const initialSavedState = readSavedState()
+const initialSavedState = readLegacyBrowserState()
 const readerState = ref({
   chapterId: null,
   chapterPositions: {},
@@ -69,6 +69,7 @@ const isNoteDialogOpen = ref(false)
 const noteDraft = ref({ title: '', body: '' })
 const noteError = ref('')
 const noteBusy = ref(false)
+let noteDraftBaseline = ''
 const chapterName = computed(() => chapters.value[activeChapter.value]?.title || chapters.value[0]?.title || '')
 const activeDocument = computed(() => chapters.value[activeChapter.value])
 const readingProgress = computed(() => chapters.value.length
@@ -103,11 +104,14 @@ let isHydrating = false
 let isSavingRecord = false
 let lastSavedPayload = ''
 let legacyState = null
+let hasUnpersistedChanges = false
 let scrollContainer = null
 let saveTimer = null
 let restoringScroll = false
 let selectionTimer = null
 let ignoreSelectionChange = false
+let isReaderUnmounted = false
+let isLeavingAfterFlush = false
 
 function isChapterBookmarked(chapterId) {
   return Boolean(chapterId && readerState.value.bookmarks.some((bookmark) => bookmark.chapterId === chapterId))
@@ -150,8 +154,9 @@ async function hydrateReaderState() {
     if (saved) {
       applyReaderState(saved)
       lastSavedPayload = JSON.stringify(readerState.value)
+      hasUnpersistedChanges = false
       legacyState = null
-      try { localStorage.removeItem(storageKey.value) } catch { /* Older browser data is optional. */ }
+      try { localStorage.removeItem(legacyStorageKey.value) } catch { /* Old data cleanup is best effort after local-file migration. */ }
     } else if (legacyState) {
       applyReaderState(legacyState)
       shouldMigrateLegacy = true
@@ -176,6 +181,7 @@ function persistState() {
   readerState.value.readDays = [...new Set([...(readerState.value.readDays || []), currentDateKey()])].slice(-180)
   emit('progress', { bookId: props.book.id, progress: readingProgress.value, chapterTitle: chapter?.title })
   if (isHydrating) return
+  hasUnpersistedChanges = true
   if (saveTimer) window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => { void flushState() }, 900)
 }
@@ -195,16 +201,23 @@ async function flushState() {
     lastReadAt: readerState.value.lastReadAt,
   }
   const serialized = JSON.stringify(payload)
-  if (serialized === lastSavedPayload) return
+  if (serialized === lastSavedPayload) {
+    hasUnpersistedChanges = false
+    return
+  }
   isSavingRecord = true
   try {
     await saveLocalRecord('reader', String(props.book.id), payload)
     lastSavedPayload = serialized
+    hasUnpersistedChanges = false
     storageHint.value = ''
-    try { localStorage.removeItem(storageKey.value) } catch { /* Older browser data is optional. */ }
+    try { localStorage.removeItem(legacyStorageKey.value) } catch { /* Old data cleanup is best effort after local-file migration. */ }
   } catch (error) {
-    try { localStorage.setItem(storageKey.value, JSON.stringify(payload)) } catch { /* Keep the visible save error if browser storage is unavailable. */ }
-    storageHint.value = error.message || '无法保存阅读进度。'
+    hasUnpersistedChanges = true
+    storageHint.value = `${error.message || '无法保存阅读进度。'} 当前修改尚未写入本机文件，暂时只留在此页面；服务恢复后会自动重试。`
+    if (localDataState.serviceAvailable && !isReaderUnmounted) {
+      saveTimer = window.setTimeout(() => { void flushState() }, 5000)
+    }
   } finally {
     isSavingRecord = false
   }
@@ -225,6 +238,21 @@ function rememberCurrentPosition() {
   if (!chapter) return
   readerState.value.chapterPositions[chapter.id] = currentScrollPosition()
   persistState()
+}
+
+async function requestBack() {
+  rememberCurrentPosition()
+  await flushState()
+  if ((hasUnpersistedChanges || isNoteDialogOpen.value)
+    && !window.confirm('阅读进度或摘录笔记还没有写入本机目录。现在离开会丢失未保存的修改，仍要离开吗？')) return
+  isLeavingAfterFlush = true
+  emit('back')
+}
+
+function protectUnsavedProgress(event) {
+  if (!hasUnpersistedChanges && !isNoteDialogOpen.value) return
+  event.preventDefault()
+  event.returnValue = ''
 }
 
 function handleScroll() {
@@ -692,12 +720,15 @@ function scheduleSelectionAction() {
 function openNoteFromSelection() {
   selectionAction.value.visible = false
   noteDraft.value = { title: `${chapterName.value} · 摘录`.slice(0, 120), body: '' }
+  noteDraftBaseline = JSON.stringify(noteDraft.value)
   noteError.value = ''
   isNoteDialogOpen.value = true
 }
 
 function closeNoteDialog() {
   if (noteBusy.value) return
+  const hasDraft = JSON.stringify(noteDraft.value) !== noteDraftBaseline
+  if ((hasDraft || noteError.value) && !window.confirm('这条摘录笔记尚未保存，确定丢弃吗？')) return
   isNoteDialogOpen.value = false
   noteError.value = ''
 }
@@ -735,11 +766,18 @@ async function saveReadingNote() {
 const codeSnippet = `from typing import List, Tuple\n\ndef rerank(query: str, candidates: List[str]):\n    """对候选文档进行重排，返回相关性分数。"""\n    pairs = [(query, doc) for doc in candidates]\n    scores = model.predict(pairs)\n    ranked = sorted(zip(candidates, scores), reverse=True)\n    return ranked`
 
 watch(
-  () => localDataState.events
+  () => `${localDataState.serviceAvailable ? 'online' : 'offline'}|${localDataState.events
     .filter((event) => event.kind === 'reader' && event.entityId === String(props.book.id))
     .map((event) => event.id)
-    .join('|'),
-  () => { void hydrateReaderState() },
+    .join('|')}`,
+  () => {
+    if (isSavingRecord) return
+    if (hasUnpersistedChanges) {
+      if (localDataState.serviceAvailable) void flushState()
+      return
+    }
+    void hydrateReaderState()
+  },
 )
 
 onMounted(async () => {
@@ -749,24 +787,29 @@ onMounted(async () => {
   document.addEventListener('selectionchange', scheduleSelectionAction)
   await hydrateReaderState()
   if (props.initialAnchor) await applyInitialAnchor(props.initialAnchor)
-  else if (chapters.value.length) persistState()
+  else if (chapters.value.length && (localDataState.serviceAvailable || legacyState)) persistState()
+  window.addEventListener('beforeunload', protectUnsavedProgress)
   nextTick(() => restorePosition(activeDocument.value?.id))
 })
 
 onBeforeUnmount(() => {
+  isReaderUnmounted = true
+  window.removeEventListener('beforeunload', protectUnsavedProgress)
   document.removeEventListener('selectionchange', scheduleSelectionAction)
   if (selectionTimer) window.clearTimeout(selectionTimer)
   if (scrollContainer) scrollContainer.removeEventListener('scroll', handleScroll)
   if (saveTimer) window.clearTimeout(saveTimer)
-  rememberCurrentPosition()
-  void flushState()
+  if (!isLeavingAfterFlush) {
+    rememberCurrentPosition()
+    if (hasUnpersistedChanges || localDataState.serviceAvailable) void flushState()
+  }
 })
 </script>
 
 <template>
   <main ref="readerRoot" class="reader-page" :class="{ 'reader-page--sepia': readerTheme === 'sepia' }">
     <header class="reader-topbar">
-      <button class="reader-book-back" @click="emit('back')"><Icon name="arrowLeft" size="18" /><span>返回</span></button>
+      <button class="reader-book-back" @click="requestBack"><Icon name="arrowLeft" size="18" /><span>返回</span></button>
       <div class="reader-book-name"><span class="reader-book-icon"><Icon name="shelf" size="17" /></span><strong>{{ book.title }}</strong><span class="reader-divider"></span><span v-if="chapters.length" class="reader-progress-text">阅读进度 {{ activeChapter + 1 }} / {{ chapters.length }}</span><span v-else class="reader-progress-text">还没有章节</span><span class="reader-progress-track"><i :style="{ width: `${readingProgress}%` }"></i></span><b>{{ readingProgress }}%</b></div>
       <div class="reader-tools"><button class="icon-button" aria-label="缩小字号" :disabled="fontSize <= 16" @click="changeFontSize(-1)"><span class="font-small">A</span></button><button class="icon-button" aria-label="放大字号" :disabled="fontSize >= 22" @click="changeFontSize(1)"><span class="font-large">A</span></button><button class="icon-button" :aria-label="isCurrentChapterBookmarked ? '取消本章书签' : '为本章添加书签'" :aria-pressed="isCurrentChapterBookmarked" @click="toggleBookmark"><Icon name="bookmark" size="18" :class="{ 'is-bookmarked': isCurrentChapterBookmarked }" /></button><button class="icon-button reader-toc-toggle" :aria-label="isTocCollapsed ? '展开章节目录' : '收起章节目录'" :aria-expanded="!isTocCollapsed" @click="isTocCollapsed = !isTocCollapsed"><Icon name="list" size="18" /></button><div class="reader-bookmark-control"><button class="icon-button" aria-label="查看书签" :aria-expanded="isBookmarkPanelOpen" @click="isBookmarkPanelOpen = !isBookmarkPanelOpen"><Icon name="bookmark" size="18" /><span v-if="savedBookmarks.length" class="reader-bookmark-count">{{ savedBookmarks.length }}</span></button><div v-if="isBookmarkPanelOpen" class="reader-bookmark-panel"><div class="reader-bookmark-heading"><strong>本书书签</strong><span>{{ savedBookmarks.length }}</span></div><button v-for="bookmark in savedBookmarks" :key="bookmark.chapterId" class="reader-bookmark-item" @click="jumpToBookmark(bookmark)"><span><small>第 {{ bookmark.index + 1 }} 章</small><strong>{{ bookmark.title }}</strong></span><Icon name="arrowRight" size="15" /></button><p v-if="!savedBookmarks.length" class="reader-bookmark-empty">阅读时点击书签图标，保存当前章节位置。</p></div></div><button class="icon-button" :aria-label="readerTheme === 'light' ? '切换到护眼纸色' : '切换到浅色主题'" @click="toggleTheme"><Icon name="moon" size="18" /></button></div>
     </header>

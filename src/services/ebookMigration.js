@@ -158,8 +158,13 @@ async function migrateOneEbook(record) {
   return saved
 }
 
+/**
+ * 通知书架重新装载电子书条目。只要这一轮迁移正常跑完就发事件（包括“没有
+ * 需要迁移的书”），否则重试后已经在本机目录里的书会一直留着过期的
+ * “待迁移”角标。
+ */
 function notifyEbooksMigrated(count) {
-  if (!count || typeof window === 'undefined') return
+  if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('zhixu:ebooks-migrated', { detail: { count } }))
 }
 

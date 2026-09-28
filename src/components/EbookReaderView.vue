@@ -48,6 +48,7 @@ const readerState = ref({
 })
 
 let epubBook = null
+let epubLocationsReady = false
 let epubRendition = null
 let pdfjsLib = null
 let pdfDocument = null
@@ -61,8 +62,8 @@ let isReady = false
 let isDirty = false
 let progressRevision = 0
 let lastSavedPayload = ''
-let currentEpubCfi = ''
-let currentEpubHref = ''
+const currentEpubCfi = ref('')
+const currentEpubHref = ref('')
 
 const progressStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progress.value))}%` }))
 const readerClass = computed(() => ({
@@ -70,7 +71,7 @@ const readerClass = computed(() => ({
   'ebook-reader--toc-open': isTocOpen.value,
   'ebook-reader--pdf': isPdf.value,
 }))
-const currentAnchor = computed(() => isPdf.value ? { page: pdfPage.value } : { cfi: currentEpubCfi, href: currentEpubHref })
+const currentAnchor = computed(() => isPdf.value ? { page: pdfPage.value } : { cfi: currentEpubCfi.value, href: currentEpubHref.value })
 const pdfHighlightStyles = computed(() => {
   if (pdfNoteHighlight.value?.page !== pdfPage.value) return []
   return pdfNoteHighlight.value.rects.map((rect) => ({
@@ -82,7 +83,7 @@ const pdfHighlightStyles = computed(() => {
 })
 const currentBookmark = computed(() => bookmarks.value.some((item) => isPdf.value
   ? item.anchor?.page === pdfPage.value
-  : item.anchor?.cfi === currentEpubCfi))
+  : item.anchor?.cfi === currentEpubCfi.value))
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
@@ -123,6 +124,11 @@ async function loadBook() {
     }
     hydrateState(saved || {})
     isReady = true
+
+    // 阅读区（epubMount / pdfStage）只在非 busy 状态下渲染，所以必须先退出
+    // loading 并等一帧，否则 renderTo(null) 会直接抛错，书永远打不开。
+    busy.value = false
+    await nextTick()
 
     if (isPdf.value) await openPdf(blob)
     else await openEpub(blob)
@@ -175,6 +181,7 @@ function disposeReader() {
   epubRendition = null
   try { epubBook?.destroy() } catch { /* A closed book has nothing to destroy. */ }
   epubBook = null
+  epubLocationsReady = false
   pdfDocument = null
 }
 
@@ -193,9 +200,34 @@ async function openEpub(blob) {
   epubRendition.themes.fontSize(`${fontSize.value}px`)
   epubRendition.on('relocated', handleEpubRelocated)
   epubRendition.on('selected', handleEpubSelection)
-  await epubRendition.display(readerState.value.cfi || readerState.value.href || undefined)
-  epubBook.locations.generate(900).then(() => {
-    const location = epubRendition?.currentLocation()
+  const restoredCfi = readerState.value.cfi
+  const restoredProgress = readerState.value.progress
+  const book = epubBook
+  const rendition = epubRendition
+  epubLocationsReady = false
+  await rendition.display(restoredCfi || readerState.value.href || undefined)
+  const firstDisplayedCfi = rendition.currentLocation()?.start?.cfi || ''
+  book.locations.generate(900).then(async () => {
+    if (epubBook !== book || epubRendition !== rendition) return
+    epubLocationsReady = true
+    let location = rendition.currentLocation()
+    const currentCfi = location?.start?.cfi || ''
+    const currentProgress = currentCfi ? book.locations.percentageFromCfi(currentCfi) : null
+    const cfiProgress = restoredCfi ? book.locations.percentageFromCfi(restoredCfi) : null
+    const hasValidCfiProgress = Number.isFinite(cfiProgress)
+      && cfiProgress >= 0 && cfiProgress <= 1
+      && (cfiProgress > 0 || restoredProgress === 0)
+    const targetProgress = hasValidCfiProgress
+      ? cfiProgress
+      : Math.max(0, Math.min(100, restoredProgress)) / 100
+
+    // EPUB.js 恢复部分 CFI 时可能落到较早页；按全书位置表校准，保留期间的用户翻页。
+    if (firstDisplayedCfi && currentCfi === firstDisplayedCfi
+      && Number.isFinite(currentProgress)
+      && Math.abs(currentProgress - targetProgress) > 0.01) {
+      await rendition.display(String(targetProgress))
+      location = rendition.currentLocation()
+    }
     if (location) handleEpubRelocated(location)
   }).catch(() => { /* Page locations are an enhancement; CFI restore still works. */ })
 }
@@ -212,16 +244,16 @@ function flattenEpubToc(items, depth = 0) {
 function handleEpubRelocated(location) {
   const start = location?.start
   if (!start) return
-  currentEpubCfi = start.cfi || currentEpubCfi
-  currentEpubHref = start.href || currentEpubHref
+  currentEpubCfi.value = start.cfi || currentEpubCfi.value
+  currentEpubHref.value = start.href || currentEpubHref.value
   const hrefPath = String(start.href || '').split('#')[0]
   const tocMatch = tocItems.value.find((item) => String(item.href).split('#')[0] === hrefPath)
   const spineItems = epubBook?.spine?.spineItems || []
   const spineIndex = spineItems.findIndex((item) => String(item.href).split('#')[0] === hrefPath)
   const displayed = start.displayed || {}
   const withinSpineProgress = displayed.total ? (Number(displayed.page || 1) - 1) / displayed.total : 0
-  const generatedProgress = currentEpubCfi && epubBook?.locations?.length
-    ? epubBook.locations.percentageFromCfi(currentEpubCfi)
+  const generatedProgress = currentEpubCfi.value && epubLocationsReady
+    ? epubBook?.locations?.percentageFromCfi(currentEpubCfi.value)
     : null
   const nextProgress = Number.isFinite(generatedProgress)
     ? Math.round(generatedProgress * 100)
@@ -231,7 +263,7 @@ function handleEpubRelocated(location) {
   const title = tocMatch?.title || start.href || props.book.title
   chapterTitle.value = title
   progress.value = Math.max(0, Math.min(100, nextProgress))
-  scheduleProgress({ cfi: currentEpubCfi, href: currentEpubHref, progress: progress.value, chapterTitle: title })
+  scheduleProgress({ cfi: currentEpubCfi.value, href: currentEpubHref.value, progress: progress.value, chapterTitle: title })
 }
 
 function handleEpubSelection(cfiRange, contents) {
@@ -244,7 +276,7 @@ function handleEpubSelection(cfiRange, contents) {
     return
   }
   selectedExcerpt.value = quote.slice(0, 3000)
-  selectedAnchor.value = { cfi: cfiRange || currentEpubCfi, href: currentEpubHref }
+  selectedAnchor.value = { cfi: cfiRange || currentEpubCfi.value, href: currentEpubHref.value }
   selectedChapterTitle.value = chapterTitle.value || props.book.title
   const range = selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null
   const frameRect = contents?.window?.frameElement?.getBoundingClientRect?.()
@@ -517,7 +549,7 @@ function toggleBookmark() {
   if (currentBookmark.value) {
     bookmarks.value = bookmarks.value.filter((item) => isPdf.value
       ? item.anchor?.page !== pdfPage.value
-      : item.anchor?.cfi !== currentEpubCfi)
+      : item.anchor?.cfi !== currentEpubCfi.value)
   } else {
     bookmarks.value = [...bookmarks.value, {
       id: globalThis.crypto?.randomUUID?.() || `bookmark-${Date.now()}`,

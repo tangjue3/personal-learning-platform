@@ -553,3 +553,102 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+
+/* Visual refinement: calmer surfaces, clearer hierarchy, and more readable study controls. */
+:root {
+  --line: #e7e9e5;
+  --canvas: #f5f6f3;
+  --shadow-card: 0 12px 30px rgba(32, 42, 37, .045), 0 2px 6px rgba(32, 42, 37, .025);
+}
+body { min-width: 320px; }
+.sidebar { background: rgba(255,255,255,.78); border-right-color: #e7e9e5; backdrop-filter: blur(20px); }
+.nav-item--active { position: relative; color: #3974c8; background: #edf3fb; }
+.nav-item--active::before { position: absolute; top: 10px; bottom: 10px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: #6b98d6; content: ''; }
+.nav-item--active:hover { color: #3274c4; background: #e8f0fa; }
+.app-topbar { border-bottom-color: #e8eae5; background: rgba(255,255,255,.68); backdrop-filter: blur(16px); }
+.global-search:hover { border-color: #dce4ed; color: #758397; background: #fff; }
+.global-search:focus-visible, .icon-button:focus-visible, .text-button:focus-visible, .tiny-link:focus-visible { outline: 3px solid rgba(75,134,238,.24); outline-offset: 2px; }
+.page-content { padding: 36px clamp(24px, 3.2vw, 48px) 52px; }
+.surface-card { border-color: var(--line); border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: var(--shadow-card); }
+.section-kicker { color: #8d98a7; font-size: 10px; letter-spacing: .075em; }
+.section-heading-row h2, .card-heading-inline h2 { font-size: 15px; }
+.text-button { color: #527dbd; font-size: 11px; }
+
+/* Today dashboard */
+.dashboard-page { --dashboard-line: #eceeea; }
+.dashboard-page .surface-card { border-radius: 19px; }
+.continue-card { background: radial-gradient(circle at 90% 14%, rgba(233,241,250,.72), transparent 31%), linear-gradient(125deg, #fff 0%, #fbfcfa 100%); }
+.continue-cover-wrap .book-cover { box-shadow: 0 12px 24px rgba(37,58,85,.15), 0 2px 5px rgba(37,58,85,.08); }
+.week-card, .agenda-card, .task-card { background: rgba(255,255,255,.96); transition: border-color .2s ease, box-shadow .2s ease; }
+.continue-card { transition: border-color .2s ease, box-shadow .2s ease; }
+.continue-card:hover, .week-card:hover, .agenda-card:hover, .task-card:hover { border-color: #e0e5e2; box-shadow: 0 14px 32px rgba(32,42,37,.06), 0 2px 6px rgba(32,42,37,.025); }
+.agenda-row { border-color: var(--dashboard-line); }
+.subtle-copy { color: #7f8997; font-size: 11px; }
+.progress-label-row { color: #7f8997; font-size: 10px; }
+.progress-label-row strong { color: #52637a; font-size: 11px; }
+.week-day { color: #8a95a4; font-size: 10px; }
+.week-note p { font-size: 11px; line-height: 1.75; }
+.week-footer { color: #85909f; font-size: 10px; }
+.agenda-time { color: #8793a2; font-size: 10px; }
+.agenda-time strong, .agenda-copy strong { font-size: 11px; }
+.agenda-copy span { color: #8793a2; font-size: 10px; }
+.status-pill { color: #7f8997; background: #f1f3f1; font-size: 9px; }
+.task-list li { color: #596678; font-size: 11px; }
+.dashboard-empty-copy { font-size: 11px; }
+.mini-book { border-color: var(--dashboard-line); background: rgba(255,255,255,.92); }
+.mini-book-info > strong { font-size: 10px; }
+.mini-book-info > span { font-size: 9px; }
+.dashboard-task-form input { height: 36px; padding: 0 11px; border-color: #e5e9e5; background: #fcfdfb; font-size: 11px; }
+.dashboard-task-form input:focus { border-color: #aac2df; box-shadow: 0 0 0 3px rgba(87,137,211,.1); }
+.dashboard-task-form button { width: 36px; background: #5d89c4; transition: background .18s ease, transform .18s ease; }
+.dashboard-task-form button:hover { background: #4f7db9; transform: translateY(-1px); }
+
+/* Notes and review workspace */
+.workspace-page .page-heading { align-items: center; }
+.workspace-page .page-heading .button { min-height: 40px; }
+.notes-toolbar { margin-bottom: 16px; padding: 15px 18px; }
+.notes-toolbar > div strong { color: #59697e; font-size: 11px; }
+.notes-toolbar .search-field { min-height: 39px; padding: 0 12px; border-color: #e6e9e5; border-radius: 10px; background: #fcfdfb; }
+.notes-toolbar .search-field:focus-within { border-color: #aac2df; box-shadow: 0 0 0 3px rgba(87,137,211,.1); }
+.real-notes-grid { gap: 15px; }
+.real-note-card { padding: 18px 19px 12px; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.real-note-card:hover { transform: translateY(-2px); border-color: #dce3e8; box-shadow: 0 15px 32px rgba(32,42,37,.07); }
+.real-note-source { color: #6684ad; font-size: 10px; }
+.real-note-card h2 { margin: 10px 0 8px; color: #344154; font-size: 15px; }
+.real-note-card p { min-height: 60px; color: #6f7b8b; font-size: 12px; line-height: 1.75; }
+.real-note-date { margin-top: 12px; color: #8994a1; font-size: 10px; }
+.real-note-card footer { border-color: #e9ece8; }
+.real-note-card footer .text-button { font-size: 10px; }
+.real-review-grid { gap: 16px; }
+.review-focus-card, .review-count-card { border-radius: 19px; }
+.review-focus-card { background: radial-gradient(circle at 92% 10%, rgba(222,235,250,.64), transparent 35%), #fff; }
+.review-focus-card h2 { font-size: 22px; line-height: 1.5; }
+.review-focus-card > p, .review-source { color: #758294; font-size: 11px; line-height: 1.7; }
+.review-ratings button { min-height: 50px; border-color: #e4e9ee; font-size: 11px; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.review-ratings button:hover { transform: translateY(-1px); }
+.review-ratings button small { font-size: 9px; }
+.review-list-row { padding: 13px 15px; }
+.review-list-row > div strong { font-size: 12px; }
+.review-list-row > div span { font-size: 10px; }
+.review-due-pill { font-size: 9px; }
+.workspace-page .button:focus-visible, .dashboard-page .button:focus-visible { outline-offset: 3px; }
+
+@media (max-width: 640px) {
+  .page-content { padding-top: 23px; }
+  .section-heading-row h2, .card-heading-inline h2 { font-size: 14px; }
+  .continue-title-row h2 { font-size: 14px; }
+  .subtle-copy { font-size: 9px; }
+  .week-day { font-size: 9px; }
+  .week-note p { font-size: 10px; }
+  .week-footer { font-size: 9px; }
+  .agenda-time { font-size: 9px; }
+  .agenda-time strong, .agenda-copy strong { font-size: 10px; }
+  .agenda-copy span { font-size: 9px; }
+  .status-pill { font-size: 8px; }
+  .task-list li { font-size: 10px; }
+  .dashboard-empty-copy { font-size: 10px; }
+  .real-note-card h2 { font-size: 14px; }
+  .real-note-card p { font-size: 11px; }
+  .notes-toolbar > div strong { font-size: 10px; }
+}
