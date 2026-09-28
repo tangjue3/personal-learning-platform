@@ -9,8 +9,13 @@ const focusDate = ref(new Date())
 const today = new Date()
 const modalOpen = ref(false)
 const formError = ref('')
+const formSaving = ref(false)
 const draft = ref(createEmptyDraft())
 const storageStatus = ref('')
+const taskTitle = ref('')
+const taskError = ref('')
+const taskSaving = ref(false)
+let draftBaseline = ''
 
 const categories = [
   { label: '学习', tone: 'blue' },
@@ -53,7 +58,7 @@ function createEmptyDraft(date = focusDate.value) {
 function readLegacyCalendarEvents() {
   try {
     const saved = window.localStorage.getItem('zhixu:calendar:v1')
-    if (!saved) return []
+    if (!saved) return null
     const payload = JSON.parse(saved)
     if (payload?.version !== 1 || !Array.isArray(payload.events)) {
       throw new Error('日历数据格式不受支持。')
@@ -62,8 +67,8 @@ function readLegacyCalendarEvents() {
     return payload.events.map(normalizeStoredEvent).filter((event) => event && !String(event.id).startsWith('demo-'))
   } catch (error) {
     console.warn('无法迁移旧版本地日程。', error)
-    storageStatus.value = '旧版本地日程无法迁移，请先导出或检查浏览器数据。'
-    return []
+    storageStatus.value = '旧版本地日程格式无法识别，尚未迁入项目目录；原始数据保持未动。'
+    return null
   }
 }
 
@@ -108,7 +113,7 @@ async function refreshCalendarEvents() {
   try {
     let records = getLocalRecords('calendar')
     const legacyEvents = readLegacyCalendarEvents()
-    if (legacyEvents.length) {
+    if (legacyEvents) {
       const existingIds = new Set(records.map((event) => String(event.id)))
       for (const event of legacyEvents) {
         if (existingIds.has(String(event.id))) continue
@@ -136,16 +141,32 @@ async function refreshCalendarEvents() {
 watch(() => localDataState.events, refreshCalendarEvents, { deep: true, immediate: true })
 
 const sortedEvents = computed(() => [...calendarEvents.value].sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`, 'zh-CN')))
+const calendarTasks = computed(() => getLocalRecords('task'))
+const calendarTasksByDate = computed(() => {
+  const groups = new Map()
+  for (const task of calendarTasks.value) {
+    if (!isValidDateKey(task.dueDate)) continue
+    const summary = groups.get(task.dueDate) || { total: 0, open: 0 }
+    summary.total += 1
+    if (!task.done) summary.open += 1
+    groups.set(task.dueDate, summary)
+  }
+  return groups
+})
 const startOfVisibleWeek = computed(() => startOfWeek(focusDate.value))
 const weekDays = computed(() => Array.from({ length: 7 }, (_, index) => {
   const date = new Date(startOfVisibleWeek.value)
   date.setDate(date.getDate() + index)
+  const key = toDateKey(date)
+  const taskSummary = calendarTasksByDate.value.get(key) || { total: 0, open: 0 }
   return {
     date,
-    key: toDateKey(date),
+    key,
     label: ['一', '二', '三', '四', '五', '六', '日'][index],
-    isToday: toDateKey(date) === toDateKey(today),
-    events: sortedEvents.value.filter((event) => event.date === toDateKey(date)),
+    isToday: key === toDateKey(today),
+    events: sortedEvents.value.filter((event) => event.date === key),
+    taskCount: taskSummary.total,
+    openTaskCount: taskSummary.open,
   }
 }))
 const weekEvents = computed(() => {
@@ -161,6 +182,7 @@ const monthDays = computed(() => {
     const date = new Date(gridStart)
     date.setDate(date.getDate() + index)
     const key = toDateKey(date)
+    const taskSummary = calendarTasksByDate.value.get(key) || { total: 0, open: 0 }
     return {
       date,
       key,
@@ -168,6 +190,8 @@ const monthDays = computed(() => {
       isToday: key === toDateKey(today),
       isSelected: key === toDateKey(focusDate.value),
       events: sortedEvents.value.filter((event) => event.date === key),
+      taskCount: taskSummary.total,
+      openTaskCount: taskSummary.open,
     }
   })
 })
@@ -185,6 +209,15 @@ const periodTitle = computed(() => {
   return `${firstLabel} — ${lastLabel}`
 })
 
+const selectedDateKey = computed(() => toDateKey(focusDate.value))
+const selectedDateLabel = computed(() => new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(focusDate.value))
+const selectedDateTasks = computed(() => calendarTasks.value
+  .filter((task) => task.dueDate === selectedDateKey.value)
+  .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done)) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+const unscheduledOpenTasks = computed(() => calendarTasks.value
+  .filter((task) => !task.done && !isValidDateKey(task.dueDate))
+  .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+const completedSelectedTasks = computed(() => selectedDateTasks.value.filter((task) => task.done).length)
 const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 8).padStart(2, '0')}:00`)
 const isEditing = computed(() => draft.value.id !== null)
 
@@ -204,22 +237,28 @@ function goToToday() {
 
 function openNewEvent(date = focusDate.value) {
   draft.value = createEmptyDraft(date)
+  draftBaseline = JSON.stringify(draft.value)
   formError.value = ''
   modalOpen.value = true
 }
 
 function openEditEvent(event) {
   draft.value = { ...event }
+  draftBaseline = JSON.stringify(draft.value)
   formError.value = ''
   modalOpen.value = true
 }
 
-function closeModal() {
+function closeModal(discard = false) {
+  if (formSaving.value && !discard) return
+  if (!discard && JSON.stringify(draft.value) !== draftBaseline
+    && !window.confirm('这条日程有未保存的修改，确定丢弃吗？')) return
   modalOpen.value = false
   formError.value = ''
 }
 
 async function saveEvent() {
+  if (formSaving.value) return
   if (draft.value.end <= draft.value.start) {
     formError.value = '结束时间需要晚于开始时间。'
     return
@@ -227,23 +266,30 @@ async function saveEvent() {
 
   const event = { ...draft.value, id: draft.value.id || createEventId() }
   const { id, ...data } = event
+  formSaving.value = true
   try {
     await saveLocalRecord('calendar', String(id), data)
     calendarEvents.value = getLocalRecords('calendar').map(normalizeStoredEvent).filter(Boolean)
     focusDate.value = fromDateKey(event.date)
-    closeModal()
+    closeModal(true)
   } catch (error) {
     formError.value = error.message
+  } finally {
+    formSaving.value = false
   }
 }
 
 async function deleteEvent() {
+  if (formSaving.value || !window.confirm('确定删除这条日程吗？')) return
+  formSaving.value = true
   try {
     await deleteLocalRecord('calendar', String(draft.value.id))
     calendarEvents.value = getLocalRecords('calendar').map(normalizeStoredEvent).filter(Boolean)
-    closeModal()
+    closeModal(true)
   } catch (error) {
     formError.value = error.message
+  } finally {
+    formSaving.value = false
   }
 }
 
@@ -263,6 +309,45 @@ function visibleOnWeek(event) {
   return event.end > '08:00' && event.start < '22:00'
 }
 
+async function addTaskForSelectedDate() {
+  const title = taskTitle.value.trim()
+  if (!title) return
+  taskError.value = ''
+  taskSaving.value = true
+  try {
+    await saveLocalRecord('task', createEventId(), {
+      title: title.slice(0, 120), done: false, dueDate: selectedDateKey.value, createdAt: new Date().toISOString(),
+    })
+    taskTitle.value = ''
+  } catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
+async function toggleCalendarTask(task) {
+  if (taskSaving.value) return
+  taskError.value = ''
+  taskSaving.value = true
+  const { id, updatedAt, ...data } = task
+  try { await saveLocalRecord('task', id, { ...data, done: !task.done, doneAt: !task.done ? new Date().toISOString() : '' }) }
+  catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
+async function scheduleUndatedTask(task) {
+  if (taskSaving.value) return
+  taskError.value = ''
+  taskSaving.value = true
+  const { id, updatedAt, ...data } = task
+  try { await saveLocalRecord('task', id, { ...data, dueDate: selectedDateKey.value }) }
+  catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
+async function removeCalendarTask(task) {
+  if (taskSaving.value || !window.confirm(`确定删除待办“${task.title}”吗？删除后将从日历待办中移除。`)) return
+  taskError.value = ''
+  taskSaving.value = true
+  try { await deleteLocalRecord('task', task.id) }
+  catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
 function eventGridRowStart(event) {
   const visibleStart = event.start < '08:00' ? '08:00' : event.start
   const [hour, minute] = visibleStart.split(':').map(Number)
@@ -302,6 +387,7 @@ function eventGridRowEnd(event) {
         <div v-for="day in weekDays" :key="day.key" class="calendar-day-heading" :class="{ 'calendar-day-heading--today': day.isToday, 'calendar-day-heading--selected': day.key === toDateKey(focusDate) }">
           <span>{{ day.label }}</span>
           <button :aria-label="`选择 ${day.key}`" @click="focusDate = new Date(day.date)">{{ day.date.getDate() }}</button>
+          <span v-if="day.openTaskCount" class="calendar-day-task-count" :aria-label="`${day.openTaskCount} 项待办`">{{ day.openTaskCount }}</span>
           <button class="calendar-day-add" :aria-label="`在 ${day.key} 新建日程`" @click="openNewEvent(day.date)"><Icon name="plus" size="13" /></button>
           <i v-if="day.isToday"></i>
         </div>
@@ -327,6 +413,7 @@ function eventGridRowEnd(event) {
         <article v-for="day in monthDays" :key="day.key" class="calendar-month-day" :class="{ 'is-outside-month': !day.inMonth, 'is-today': day.isToday, 'is-selected': day.isSelected }">
           <div class="calendar-month-day-top">
             <button class="calendar-month-date" :class="{ 'is-today': day.isToday }" @click="focusDate = new Date(day.date)">{{ day.date.getDate() }}</button>
+            <span v-if="day.openTaskCount" class="calendar-month-task-count">{{ day.openTaskCount }} 项待办</span>
             <button class="calendar-month-add" :aria-label="`在 ${day.key} 新建日程`" @click="openNewEvent(day.date)"><Icon name="plus" size="13" /></button>
           </div>
           <button v-for="event in day.events.slice(0, 3)" :key="event.id" class="calendar-month-event" :class="`calendar-month-event--${categoryTone(event.category)}`" :title="`${event.start} ${event.title}`" @click="openEditEvent(event)">
@@ -337,13 +424,41 @@ function eventGridRowEnd(event) {
       </div>
     </section>
 
-    <div class="calendar-footnote" :class="{ 'calendar-footnote--warning': storageStatus }"><span class="live-dot"></span> {{ storageStatus || '日程保存在本机，不会同步到 GitHub。' }}</div>
+    <section class="calendar-task-panel surface-card" aria-labelledby="calendar-task-title">
+      <header class="calendar-task-heading">
+        <div><span class="section-kicker">按日期安排</span><h2 id="calendar-task-title">{{ selectedDateLabel }} · 待办事项</h2></div>
+        <span class="calendar-task-progress">{{ completedSelectedTasks }} / {{ selectedDateTasks.length }} 已完成</span>
+      </header>
+      <p v-if="taskError" class="calendar-task-error" role="alert">{{ taskError }}</p>
+      <ul v-if="selectedDateTasks.length" class="calendar-task-list">
+        <li v-for="task in selectedDateTasks" :key="task.id" class="calendar-task-row" :class="{ 'is-done': task.done }">
+          <button type="button" class="calendar-task-toggle" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :aria-pressed="task.done" @click="toggleCalendarTask(task)" :disabled="taskSaving"><Icon v-if="task.done" name="check" size="13" /></button>
+          <span class="calendar-task-title">{{ task.title }}</span>
+          <button type="button" class="calendar-task-delete" :aria-label="`删除待办：${task.title}`" @click="removeCalendarTask(task)" :disabled="taskSaving"><Icon name="trash" size="14" /></button>
+        </li>
+      </ul>
+      <p v-else class="calendar-task-empty">这一天还没有待办。添加一件小事，让安排更清楚。</p>
+      <details v-if="unscheduledOpenTasks.length" class="calendar-unscheduled">
+        <summary>未安排日期 <span>{{ unscheduledOpenTasks.length }} 件</span></summary>
+        <ul>
+          <li v-for="task in unscheduledOpenTasks" :key="task.id">
+            <span>{{ task.title }}</span>
+            <button type="button" :disabled="taskSaving" @click="scheduleUndatedTask(task)">安排到这一天</button>
+          </li>
+        </ul>
+      </details>
+      <form class="calendar-task-form" @submit.prevent="addTaskForSelectedDate">
+        <input v-model.trim="taskTitle" type="text" maxlength="120" required :disabled="taskSaving" :aria-label="`添加 ${selectedDateLabel} 的待办`" placeholder="添加这一天要完成的事" />
+        <button type="submit" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="15" /> {{ taskSaving ? '保存中…' : '添加待办' }}</button>
+      </form>
+    </section>
+    <div class="calendar-footnote" :class="{ 'calendar-footnote--warning': storageStatus }"><span class="live-dot"></span> {{ storageStatus || '日程和待办保存在本机，不会同步到 GitHub。' }}</div>
 
     <div v-if="modalOpen" class="schedule-modal-backdrop" @click.self="closeModal" @keydown.esc.stop.prevent="closeModal">
       <section class="schedule-modal" role="dialog" aria-modal="true" :aria-labelledby="'schedule-modal-title'">
         <header class="schedule-modal-header">
           <div><span class="section-kicker">日历 · {{ isEditing ? '编辑安排' : '添加安排' }}</span><h2 id="schedule-modal-title">{{ isEditing ? '编辑日程' : '新建日程' }}</h2></div>
-          <button class="icon-button" aria-label="关闭" @click="closeModal"><Icon name="close" size="18" /></button>
+          <button class="icon-button" aria-label="关闭" :disabled="formSaving" @click="closeModal"><Icon name="close" size="18" /></button>
         </header>
         <form class="schedule-form" @submit.prevent="saveEvent">
           <label class="schedule-field schedule-field--full"><span>日程标题</span><input v-model.trim="draft.title" autofocus required maxlength="80" placeholder="例如：阅读 RAG 工程学习手册" /></label>
@@ -354,9 +469,9 @@ function eventGridRowEnd(event) {
           <label class="schedule-field schedule-field--full"><span>关联学习书籍 <small>可选</small></span><select v-model="draft.bookId"><option value="">暂不关联</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label>
           <p v-if="formError" class="schedule-form-error" role="alert">{{ formError }}</p>
           <footer class="schedule-form-actions">
-            <button v-if="isEditing" type="button" class="schedule-delete-button" @click="deleteEvent">删除日程</button>
+            <button v-if="isEditing" type="button" class="schedule-delete-button" :disabled="formSaving" @click="deleteEvent">删除日程</button>
             <span v-else></span>
-            <div><button type="button" class="button button-secondary" @click="closeModal">取消</button><button type="submit" class="button button-primary">{{ isEditing ? '保存修改' : '保存日程' }}</button></div>
+            <div><button type="button" class="button button-secondary" :disabled="formSaving" @click="closeModal">取消</button><button type="submit" class="button button-primary" :disabled="formSaving">{{ formSaving ? '正在保存…' : isEditing ? '保存修改' : '保存日程' }}</button></div>
           </footer>
         </form>
       </section>
@@ -366,6 +481,16 @@ function eventGridRowEnd(event) {
 
 <style scoped>
 .calendar-day-heading { gap: 6px; }
+.calendar-day-task-count { min-width: 15px; height: 15px; display: inline-grid; place-items: center; padding: 0 3px; border-radius: 6px; color: #6584ae; background: #edf3fc; font-size: 8px; font-weight: 600; }
+.calendar-month-task-count { margin-right: auto; color: #6889b5; font-size: 7px; white-space: nowrap; }
+.calendar-unscheduled { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #edf0ed; border-radius: 10px; background: #fbfcfb; }
+.calendar-unscheduled summary { display: flex; align-items: center; justify-content: space-between; color: #697789; font-size: 10px; cursor: pointer; list-style-position: inside; }
+.calendar-unscheduled summary span { color: #929eac; font-size: 9px; }
+.calendar-unscheduled ul { display: grid; gap: 2px; margin: 8px 0 0; padding: 0; list-style: none; }
+.calendar-unscheduled li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; border-top: 1px solid #edf0ed; }
+.calendar-unscheduled li > span { min-width: 0; overflow: hidden; color: #5d6b7d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-unscheduled li button { flex: 0 0 auto; padding: 6px 8px; border: 0; border-radius: 7px; color: #5e82b3; background: #f0f5fc; font: inherit; font-size: 9px; cursor: pointer; }
+.calendar-unscheduled li button:disabled { opacity: .5; cursor: not-allowed; }
 .calendar-footnote--warning { color: #b96e63; }
 .calendar-footnote--warning .live-dot { background: #cf8a7f; }
 .calendar-day-heading > button:first-of-type { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #586577; background: transparent; font-size: 10px; font-weight: 550; cursor: pointer; }
@@ -431,4 +556,25 @@ function eventGridRowEnd(event) {
   .schedule-modal-backdrop { align-items: end; padding: 0; }
   .schedule-modal { width: 100%; max-height: 92vh; padding: 20px 18px max(20px, env(safe-area-inset-bottom)); border-radius: 19px 19px 0 0; }
 }
+.calendar-task-panel { margin-top: 14px; padding: 18px 20px; }
+.calendar-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.calendar-task-heading h2 { margin: 5px 0 0; color: #354155; font-size: 15px; font-weight: 620; letter-spacing: -.02em; }
+.calendar-task-progress { color: #8190a2; font-size: 10px; white-space: nowrap; }
+.calendar-task-list { display: grid; gap: 2px; margin: 12px 0 0; padding: 0; list-style: none; }
+.calendar-task-row { min-height: 42px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #edf0ed; }
+.calendar-task-toggle { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border: 1px solid #cfd7dd; border-radius: 6px; color: #fff; background: #fff; cursor: pointer; }
+.calendar-task-row.is-done .calendar-task-toggle { border-color: #78a28a; background: #78a28a; }
+.calendar-task-toggle:disabled, .calendar-task-delete:disabled { opacity: .55; cursor: wait; }
+.calendar-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere; color: #566477; font-size: 11px; line-height: 1.55; }
+.calendar-task-row.is-done .calendar-task-title { color: #9ba5af; text-decoration: line-through; }
+.calendar-task-delete { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #a3abb5; background: transparent; cursor: pointer; }
+.calendar-task-delete:hover { color: #b36862; background: #fbf2f1; }
+.calendar-task-empty { margin: 12px 0; color: #8491a0; font-size: 11px; }
+.calendar-task-form { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0ed; }
+.calendar-task-form input { min-width: 0; min-height: 38px; flex: 1; padding: 0 11px; border: 1px solid #e5e9e5; border-radius: 10px; outline: 0; color: #4c5a6d; background: #fcfdfb; font: inherit; font-size: 11px; }
+.calendar-task-form input:focus { border-color: #a9c1df; box-shadow: 0 0 0 3px rgba(87,137,211,.1); }
+.calendar-task-form button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 10px; color: #fff; background: #5e89c4; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+.calendar-task-form button:disabled { opacity: .5; cursor: not-allowed; }
+.calendar-task-error { margin: 10px 0; color: #b65f58; font-size: 10px; }
+@media (max-width: 640px) { .calendar-task-panel { padding: 15px; } .calendar-task-heading h2 { font-size: 13px; } .calendar-task-title { font-size: 10px; } .calendar-task-form button { padding: 0 9px; font-size: 9px; } }
 </style>
