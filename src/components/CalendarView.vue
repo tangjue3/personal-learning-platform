@@ -18,6 +18,9 @@ const taskPriority = ref('normal')
 const taskError = ref('')
 const taskSaving = ref(false)
 let draftBaseline = ''
+let calendarPreferenceRestored = false
+let calendarPreferenceTimer = null
+let preferenceSaveQueue = Promise.resolve()
 
 const categories = [
   { label: '学习', tone: 'blue' },
@@ -35,7 +38,19 @@ function toDateKey(date) {
 
 const todayKey = computed(() => toDateKey(calendarNow.value))
 onMounted(() => { clockTimer = window.setInterval(() => { calendarNow.value = new Date() }, 30_000) })
-onBeforeUnmount(() => { if (clockTimer) window.clearInterval(clockTimer) })
+onBeforeUnmount(() => {
+  if (clockTimer) window.clearInterval(clockTimer)
+  if (calendarPreferenceTimer) {
+    window.clearTimeout(calendarPreferenceTimer)
+    calendarPreferenceTimer = null
+    saveCalendarPreference()
+  }
+})
+
+watch(() => localDataState.serviceAvailable, (available) => {
+  if (available) restoreCalendarPreference()
+}, { immediate: true })
+watch([mode, () => toDateKey(focusDate.value)], queueCalendarPreferenceSave)
 
 function fromDateKey(key) {
   const [year, month, day] = key.split('-').map(Number)
@@ -99,6 +114,32 @@ function isValidDateKey(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const date = fromDateKey(value)
   return !Number.isNaN(date.getTime()) && toDateKey(date) === value
+}
+
+function restoreCalendarPreference() {
+  if (calendarPreferenceRestored || !localDataState.serviceAvailable) return
+  const preference = getLocalRecord('preference', 'calendar')
+  if (['周', '月'].includes(preference?.mode)) mode.value = preference.mode
+  if (isValidDateKey(preference?.focusDate)) focusDate.value = fromDateKey(preference.focusDate)
+  calendarPreferenceRestored = true
+}
+
+function queueCalendarPreferenceSave() {
+  if (!calendarPreferenceRestored) return
+  if (calendarPreferenceTimer) window.clearTimeout(calendarPreferenceTimer)
+  calendarPreferenceTimer = window.setTimeout(() => {
+    calendarPreferenceTimer = null
+    saveCalendarPreference()
+  }, 250)
+}
+
+function saveCalendarPreference() {
+  if (!calendarPreferenceRestored || !localDataState.serviceAvailable) return
+  const preference = { mode: mode.value, focusDate: toDateKey(focusDate.value) }
+  preferenceSaveQueue = preferenceSaveQueue
+    .catch(() => {})
+    .then(() => saveLocalRecord('preference', 'calendar', preference))
+    .catch((error) => { storageStatus.value = error.message || '无法保存日历视图偏好。' })
 }
 
 function createEventId() {
