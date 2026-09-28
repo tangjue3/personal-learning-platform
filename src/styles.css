@@ -58,7 +58,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .quote-mark { display: block; height: 17px; color: #91b8f3; font-family: Georgia, serif; font-size: 32px; line-height: 1; }
 .sidebar-quote p { margin: 7px 0 7px; color: #556273; font-size: 13px; line-height: 1.8; letter-spacing: .03em; }
 .sidebar-quote > span:last-child { color: #a0a8b4; font-size: 10px; }
-.profile-button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 8px 7px; border: 0; border-top: 1px solid #edf0f3; background: transparent; text-align: left; cursor: pointer; }
+.profile-button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 8px 7px; border: 0; border-top: 1px solid #edf0f3; background: transparent; text-align: left; }
 .profile-avatar, .topbar-avatar, .avatar-button { display: grid; place-items: center; border-radius: 50%; color: #fff; background: linear-gradient(145deg, #a9c3dc, #718da9); font-weight: 600; }
 .profile-avatar { width: 31px; height: 31px; font-size: 12px; }
 .profile-copy { flex: 1; display: grid; gap: 3px; }
@@ -80,7 +80,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .topbar-icon-button, .icon-button { position: relative; width: 34px; height: 34px; display: inline-grid; place-items: center; border: 0; border-radius: 9px; color: #7f8998; background: transparent; cursor: pointer; transition: color .18s ease, background .18s ease, transform .18s ease; }
 .topbar-icon-button:hover, .icon-button:hover { color: #4a7fd0; background: #f1f5fa; }
 .topbar-icon-button i { position: absolute; top: 7px; right: 7px; width: 5px; height: 5px; border: 1px solid #fff; border-radius: 50%; background: #ea927b; }
-.topbar-avatar { width: 29px; height: 29px; border: 0; font-size: 11px; cursor: pointer; }
+.topbar-avatar { width: 29px; height: 29px; border: 0; font-size: 11px; }
 .page-scroller { flex: 1; min-height: 0; overflow: auto; scrollbar-color: #d8dde5 transparent; scrollbar-width: thin; }
 .page-content { width: min(100%, 1480px); margin: 0 auto; padding: 33px 42px 46px; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
@@ -91,7 +91,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .eyebrow-line { width: 17px; height: 1px; border-radius: 1px; background: #9db5d5; }
 .heading-side { display: flex; align-items: center; gap: 14px; padding-bottom: 2px; }
 .date-label { color: #798492; font-size: 11px; }
-.avatar-button { width: 32px; height: 32px; border: 0; font-size: 11px; cursor: pointer; }
+.avatar-button { width: 32px; height: 32px; border: 0; font-size: 11px; }
 .surface-card { border: 1px solid #e9edf1; border-radius: 17px; background: rgba(255,255,255,.9); box-shadow: var(--shadow-card); }
 .section-kicker { color: #9aa3b1; font-size: 9px; font-weight: 600; letter-spacing: .1em; }
 .section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
@@ -139,7 +139,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .note-quote { color: #a4c3f0; font-family: Georgia, serif; font-size: 31px; line-height: 1; }
 .week-note p { margin: 2px 0 0; color: #66748a; font-size: 10px; line-height: 1.8; }
 .week-footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 13px; color: #9ba3af; font-size: 9px; }
-.tiny-link { display: inline-flex; align-items: center; color: #7799c8; }
+.tiny-link { display: inline-flex; align-items: center; padding: 0; border: 0; color: #7799c8; background: transparent; font: inherit; cursor: pointer; }
 .dashboard-middle-grid { display: grid; grid-template-columns: minmax(0, 1.72fr) minmax(280px, .96fr); gap: 16px; margin-top: 16px; }
 .agenda-card, .task-card { min-height: 224px; padding: 18px 20px 12px; }
 .agenda-list { margin-top: 10px; }
@@ -473,7 +473,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .continue-title-row { margin-top: 7px; }
   .continue-title-row h2 { font-size: 13px; line-height: 1.45; }
   .subtle-copy { font-size: 8px; line-height: 1.6; }
-  .bookmark-action { display: none; }
+  .bookmark-action { display: grid; }
   .progress-label-row { margin-top: 13px; font-size: 8px; }
   .continue-actions { gap: 6px; margin-top: 12px; }
   .continue-actions .button { min-height: 30px; gap: 5px; padding: 0 8px; font-size: 8px; }
@@ -540,7 +540,6 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .reader-book-icon, .reader-book-name > strong, .reader-divider, .reader-progress-text, .reader-progress-track, .reader-book-name b { display: none; }
   .reader-tools { gap: 0; }
   .reader-tools .icon-button { width: 29px; }
-  .reader-tools .icon-button:nth-child(2) { display: none; }
   .reader-layout { display: block; min-height: calc(100vh - 55px); }
   .reader-toc { display: none; }
   .reading-canvas { min-height: calc(100vh - 55px); padding: 28px 19px 35px; }

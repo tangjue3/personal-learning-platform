@@ -1,30 +1,22 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import { getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
 
+const props = defineProps({ books: { type: Array, default: () => [] } })
 const mode = ref('周')
 const focusDate = ref(new Date())
 const today = new Date()
 const modalOpen = ref(false)
 const formError = ref('')
 const draft = ref(createEmptyDraft())
+const storageStatus = ref('')
 
 const categories = [
   { label: '学习', tone: 'blue' },
   { label: '工作', tone: 'lavender' },
   { label: '生活', tone: 'peach' },
   { label: '待办', tone: 'mint' },
-]
-
-const books = [
-  { id: 'rag-engineering', title: 'RAG 工程学习手册' },
-  { id: 'programming', title: '编程语言基础' },
-  { id: 'ai-engineering', title: 'AI 工程实践' },
-  { id: 'frontend', title: '前端工程实践' },
-  { id: 'product-thinking', title: '产品思维' },
-  { id: 'computer-science', title: '计算机基础' },
-  { id: 'design-foundations', title: '设计基础' },
-  { id: 'learning-methods', title: '高效学习方法' },
 ]
 
 function toDateKey(date) {
@@ -58,16 +50,90 @@ function createEmptyDraft(date = focusDate.value) {
   }
 }
 
-const initialMonday = startOfWeek(today)
-const calendarEvents = ref([
-  { id: 1, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate())), start: '09:00', end: '11:00', title: '晨间阅读', category: '学习', bookId: 'rag-engineering' },
-  { id: 2, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 1)), start: '14:00', end: '15:00', title: '项目同步', category: '工作', bookId: '' },
-  { id: 3, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 2)), start: '10:00', end: '12:00', title: '机器学习基础', category: '学习', bookId: 'computer-science' },
-  { id: 4, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 3)), start: '15:00', end: '16:00', title: '牙科检查', category: '生活', bookId: '' },
-  { id: 5, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 4)), start: '09:00', end: '11:00', title: 'RAG 工程学习手册', category: '学习', bookId: 'rag-engineering' },
-  { id: 6, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 5)), start: '18:30', end: '20:00', title: '朋友聚餐', category: '生活', bookId: '' },
-  { id: 7, date: toDateKey(new Date(initialMonday.getFullYear(), initialMonday.getMonth(), initialMonday.getDate() + 6)), start: '10:00', end: '12:00', title: '复习与整理', category: '待办', bookId: '' },
-])
+function readLegacyCalendarEvents() {
+  try {
+    const saved = window.localStorage.getItem('zhixu:calendar:v1')
+    if (!saved) return []
+    const payload = JSON.parse(saved)
+    if (payload?.version !== 1 || !Array.isArray(payload.events)) {
+      throw new Error('日历数据格式不受支持。')
+    }
+
+    return payload.events.map(normalizeStoredEvent).filter((event) => event && !String(event.id).startsWith('demo-'))
+  } catch (error) {
+    console.warn('无法迁移旧版本地日程。', error)
+    storageStatus.value = '旧版本地日程无法迁移，请先导出或检查浏览器数据。'
+    return []
+  }
+}
+
+function normalizeStoredEvent(event, index) {
+  if (!event || typeof event !== 'object') return null
+  if (!isValidDateKey(event.date)) return null
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.end)) return null
+  if (event.end <= event.start || typeof event.title !== 'string' || !event.title.trim()) return null
+
+  return {
+    id: typeof event.id === 'string' || typeof event.id === 'number' ? event.id : `saved-${index}`,
+    title: event.title.trim().slice(0, 80),
+    date: event.date,
+    start: event.start,
+    end: event.end,
+    category: categories.some((item) => item.label === event.category) ? event.category : '学习',
+    bookId: typeof event.bookId === 'string' ? event.bookId : '',
+  }
+}
+
+function isValidDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = fromDateKey(value)
+  return !Number.isNaN(date.getTime()) && toDateKey(date) === value
+}
+
+function createEventId() {
+  return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+const calendarEvents = ref([])
+let isRefreshingCalendar = false
+let calendarRefreshRequested = false
+
+async function refreshCalendarEvents() {
+  if (isRefreshingCalendar) {
+    calendarRefreshRequested = true
+    return
+  }
+
+  isRefreshingCalendar = true
+  try {
+    let records = getLocalRecords('calendar')
+    const legacyEvents = readLegacyCalendarEvents()
+    if (legacyEvents.length) {
+      const existingIds = new Set(records.map((event) => String(event.id)))
+      for (const event of legacyEvents) {
+        if (existingIds.has(String(event.id))) continue
+        const { id, updatedAt, ...data } = event
+        await saveLocalRecord('calendar', String(id), data)
+        existingIds.add(String(id))
+      }
+      window.localStorage.removeItem('zhixu:calendar:v1')
+      records = getLocalRecords('calendar')
+    }
+    calendarEvents.value = records.map(normalizeStoredEvent).filter(Boolean)
+    if (!storageStatus.value.includes('无法迁移')) storageStatus.value = ''
+  } catch (error) {
+    console.warn('无法读取本机日程。', error)
+    storageStatus.value = error.message || '无法读取本机日程。'
+  } finally {
+    isRefreshingCalendar = false
+    if (calendarRefreshRequested) {
+      calendarRefreshRequested = false
+      void refreshCalendarEvents()
+    }
+  }
+}
+
+watch(() => localDataState.events, refreshCalendarEvents, { deep: true, immediate: true })
 
 const sortedEvents = computed(() => [...calendarEvents.value].sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`, 'zh-CN')))
 const startOfVisibleWeek = computed(() => startOfWeek(focusDate.value))
@@ -153,32 +219,36 @@ function closeModal() {
   formError.value = ''
 }
 
-function saveEvent() {
+async function saveEvent() {
   if (draft.value.end <= draft.value.start) {
     formError.value = '结束时间需要晚于开始时间。'
     return
   }
 
-  const event = { ...draft.value }
-  if (event.id === null) {
-    event.id = Date.now()
-    calendarEvents.value.push(event)
-  } else {
-    const index = calendarEvents.value.findIndex((item) => item.id === event.id)
-    if (index !== -1) calendarEvents.value[index] = event
+  const event = { ...draft.value, id: draft.value.id || createEventId() }
+  const { id, ...data } = event
+  try {
+    await saveLocalRecord('calendar', String(id), data)
+    calendarEvents.value = getLocalRecords('calendar').map(normalizeStoredEvent).filter(Boolean)
+    focusDate.value = fromDateKey(event.date)
+    closeModal()
+  } catch (error) {
+    formError.value = error.message
   }
-
-  focusDate.value = fromDateKey(event.date)
-  closeModal()
 }
 
-function deleteEvent() {
-  calendarEvents.value = calendarEvents.value.filter((event) => event.id !== draft.value.id)
-  closeModal()
+async function deleteEvent() {
+  try {
+    await deleteLocalRecord('calendar', String(draft.value.id))
+    calendarEvents.value = getLocalRecords('calendar').map(normalizeStoredEvent).filter(Boolean)
+    closeModal()
+  } catch (error) {
+    formError.value = error.message
+  }
 }
 
 function bookTitle(bookId) {
-  return books.find((book) => book.id === bookId)?.title || ''
+  return props.books.find((book) => book.id === bookId)?.title || ''
 }
 
 function categoryTone(category) {
@@ -267,7 +337,7 @@ function eventGridRowEnd(event) {
       </div>
     </section>
 
-    <div class="calendar-footnote"><span class="live-dot"></span> 点击日程可编辑，日历包含学习、工作、生活与待办安排</div>
+    <div class="calendar-footnote" :class="{ 'calendar-footnote--warning': storageStatus }"><span class="live-dot"></span> {{ storageStatus || '日程保存在本机，不会同步到 GitHub。' }}</div>
 
     <div v-if="modalOpen" class="schedule-modal-backdrop" @click.self="closeModal" @keydown.esc.stop.prevent="closeModal">
       <section class="schedule-modal" role="dialog" aria-modal="true" :aria-labelledby="'schedule-modal-title'">
@@ -296,6 +366,8 @@ function eventGridRowEnd(event) {
 
 <style scoped>
 .calendar-day-heading { gap: 6px; }
+.calendar-footnote--warning { color: #b96e63; }
+.calendar-footnote--warning .live-dot { background: #cf8a7f; }
 .calendar-day-heading > button:first-of-type { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #586577; background: transparent; font-size: 10px; font-weight: 550; cursor: pointer; }
 .calendar-day-heading--today > button:first-of-type { color: #fff; background: #4c87ea; box-shadow: 0 3px 8px rgba(67,127,226,.2); }
 .calendar-day-heading--selected:not(.calendar-day-heading--today) > button:first-of-type { color: #4b83d9; background: #eaf2ff; }

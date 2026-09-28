@@ -22,6 +22,7 @@ const paths = {
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="m5 12.5 4.2 4.2L19.5 6.8"/>',
+  circle: '<circle cx="12" cy="12" r="8.5"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
   more: '<circle cx="5" cy="12" r=".8"/><circle cx="12" cy="12" r=".8"/><circle cx="19" cy="12" r=".8"/>',
   filter: '<path d="M4 6h16M7 12h10m-7 6h4"/>',
@@ -34,6 +35,12 @@ const paths = {
   list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
   play: '<path d="m9 6 10 6-10 6z"/>',
+  sync: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.4 6.5L20 12M4 12l1.6 5.5A7 7 0 0 0 17.9 15"/>',
+  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/>',
+  upload: '<path d="M12 16V4m-5 5 5-5 5 5M4 17v3h16v-3"/>',
+  lock: '<rect x="4.5" y="10" width="15" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
+  edit: '<path d="M12 20h9"/><path d="m16.5 3.5 4 4L8 20l-5 1 1-5z"/>',
+  trash: '<path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/>',
 }
 
 const iconMarkup = computed(() => paths[props.name] || paths.sparkles)
