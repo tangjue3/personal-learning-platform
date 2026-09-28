@@ -209,7 +209,13 @@ function formatDate(value) {
 }
 function eventDate(value) { return value === dateKey(new Date()) ? '今天' : formatDate(String(value) + 'T12:00:00') }
 function pagePreview(page) { return String(page.body || '').replace(/[#>*_~\[\]-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 72) || '还没有内容' }
-function saveShortcut(event) {
+async function focusPageById(id) {
+  const page = pages.value.find((item) => item.id === id)
+  if (!page) return false
+  if (dirty.value && !(await savePage())) return false
+  loadPage(page)
+  return true
+}function saveShortcut(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void savePage() }
 }
 onMounted(() => { if (pages.value[0]) loadPage(pages.value[0]); window.addEventListener('keydown', saveShortcut) })
@@ -218,6 +224,7 @@ onBeforeUnmount(() => {
   if (saveTimer) window.clearTimeout(saveTimer)
   if (dirty.value) void savePage()
 })
+defineExpose({ focusPageById })
 </script>
 
 <template>
@@ -284,7 +291,7 @@ onBeforeUnmount(() => {
 .workbench-page-search { height:34px; display:flex; align-items:center; gap:7px; padding:0 9px; border:1px solid #e8ebe7; border-radius:8px; color:#9ba4b0; background:white; }
 .workbench-page-search input { width:100%; min-width:0; border:0; outline:0; color:#4c596b; background:transparent; font:inherit; font-size:10px; }
 .workbench-page-list { display:grid; gap:3px; max-height:min(55vh,570px); overflow:auto; }
-.workbench-page-item { width:100%; min-width:0; display:flex; align-items:flex-start; gap:9px; padding:9px 8px; border:0; border-radius:9px; color:#627083; background:transparent; text-align:left; cursor:pointer; }
+.workbench-page-item { width:auto; min-width:0; display:flex; align-items:flex-start; gap:9px; padding:9px 8px; border:0; border-radius:9px; color:#627083; background:transparent; text-align:left; cursor:pointer; }
 .workbench-page-item:hover { background:#f4f6f3; }
 .workbench-page-tree-marker { width:12px; flex:0 0 12px; color:#a0a9b3; font-size:11px; text-align:center; }
 .workbench-page-tree-marker.is-child { color:#9eabb8; }

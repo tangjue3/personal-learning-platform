@@ -71,7 +71,15 @@ function openNewNote() {
   editorError.value = ''
   editorOpen.value = true
 }
-function editNote(note) {
+function focusNoteById(id) {
+  if (props.kind !== 'notes') return false
+  const note = notes.value.find((item) => item.id === id)
+  if (!note) return false
+  searchText.value = ''
+  selectedTag.value = ''
+  editNote(note)
+  return true
+}function editNote(note) {
   noteDraft.value = { ...emptyNote(), ...note, tags: Array.isArray(note.tags) ? note.tags.join(', ') : '' }
   noteDraftBaseline = JSON.stringify(noteDraft.value)
   editorError.value = ''
@@ -250,7 +258,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
-defineExpose({ startReview, focusNewCard: startNewCard })
+defineExpose({ startReview, focusNewCard: startNewCard, focusNoteById })
 </script>
 
 <template>
