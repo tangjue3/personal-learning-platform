@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import TaskEditorDialog from './TaskEditorDialog.vue'
 import { getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
@@ -17,6 +18,7 @@ const taskTitle = ref('')
 const taskPriority = ref('normal')
 const taskError = ref('')
 const taskSaving = ref(false)
+const editingTask = ref(null)
 let draftBaseline = ''
 let calendarPreferenceRestored = false
 let calendarPreferenceTimer = null
@@ -426,6 +428,7 @@ async function removeCalendarTask(task) {
   catch (error) { taskError.value = error.message }
   finally { taskSaving.value = false }
 }
+function editCalendarTask(task) { editingTask.value = task }
 function eventGridRowStart(event) {
   const visibleStart = event.start < '08:00' ? '08:00' : event.start
   const [hour, minute] = visibleStart.split(':').map(Number)
@@ -513,6 +516,7 @@ function eventGridRowEnd(event) {
           <button type="button" class="calendar-task-toggle" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :aria-pressed="task.done" @click="toggleCalendarTask(task)" :disabled="taskSaving"><Icon v-if="task.done" name="check" size="13" /></button>
           <span class="calendar-task-title">{{ task.title }}</span>
           <select class="calendar-task-priority" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateCalendarTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select>
+          <button type="button" class="calendar-task-edit" :aria-label="'编辑待办：' + task.title" @click="editCalendarTask(task)" :disabled="taskSaving"><Icon name="edit" size="14" /></button>
           <button type="button" class="calendar-task-delete" :aria-label="`删除待办：${task.title}`" @click="removeCalendarTask(task)" :disabled="taskSaving"><Icon name="trash" size="14" /></button>
         </li>
       </ul>
@@ -522,6 +526,7 @@ function eventGridRowEnd(event) {
         <ul>
           <li v-for="task in unscheduledOpenTasks" :key="task.id">
             <span>{{ task.title }}</span>
+            <button type="button" :disabled="taskSaving" @click="editCalendarTask(task)">编辑</button>
             <button type="button" :disabled="taskSaving" @click="scheduleUndatedTask(task)">安排到这一天</button>
           </li>
         </ul>
@@ -533,6 +538,7 @@ function eventGridRowEnd(event) {
       </form>
     </section>
     <div class="calendar-footnote" :class="{ 'calendar-footnote--warning': storageStatus }"><span class="live-dot"></span> {{ storageStatus || '日程和待办保存在本机，不会同步到 GitHub。' }}</div>
+    <TaskEditorDialog :open="Boolean(editingTask)" :task="editingTask" @close="editingTask = null" @saved="editingTask = null" />
 
     <div v-if="modalOpen" class="schedule-modal-backdrop" @click.self="closeModal" @keydown.esc.stop.prevent="closeModal">
       <section class="schedule-modal" role="dialog" aria-modal="true" :aria-labelledby="'schedule-modal-title'">
@@ -649,6 +655,9 @@ function eventGridRowEnd(event) {
 .calendar-task-row.is-done .calendar-task-title { color: #9ba5af; text-decoration: line-through; }
 .calendar-task-delete { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #a3abb5; background: transparent; cursor: pointer; }
 .calendar-task-delete:hover { color: #b36862; background: #fbf2f1; }
+.calendar-task-edit { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #99a4b2; background: transparent; cursor: pointer; }
+.calendar-task-edit:hover { color: #5d82b7; background: #f1f5fb; }
+.calendar-task-edit:disabled { opacity: .55; cursor: wait; }
 .calendar-task-empty { margin: 12px 0; color: #8491a0; font-size: 11px; }
 .calendar-task-form { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0ed; }
 .calendar-task-form input { min-width: 0; min-height: 38px; flex: 1; padding: 0 11px; border: 1px solid #e5e9e5; border-radius: 10px; outline: 0; color: #4c5a6d; background: #fcfdfb; font: inherit; font-size: 11px; }

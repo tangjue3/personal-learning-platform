@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import BookCover from './BookCover.vue'
 import Icon from './Icon.vue'
+import TaskEditorDialog from './TaskEditorDialog.vue'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
 import { isReviewDue } from '../services/reviewSchedule.js'
 
@@ -11,6 +12,7 @@ const taskTitle = ref('')
 const taskPriority = ref('normal')
 const taskError = ref('')
 const taskSaving = ref(false)
+const editingTask = ref(null)
 const currentTime = ref(new Date())
 const favoriteError = ref('')
 let clockTimer = null
@@ -120,6 +122,7 @@ async function removeTask(task) {
   catch (error) { taskError.value = error.message }
   finally { taskSaving.value = false }
 }
+function editTask(task) { editingTask.value = task }
 async function toggleFeaturedFavorite() {
   if (!featuredBook.value) return
   favoriteError.value = ''
@@ -209,13 +212,15 @@ async function toggleFeaturedFavorite() {
         <article class="task-card surface-card">
           <div class="section-heading-row"><div><span class="section-kicker">轻轻推进</span><h2>今天的待办</h2></div><span class="task-count">{{ tasks.filter((task) => !task.done).length }} 项未完成</span></div>
           <ul class="task-list">
-            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-delete" :aria-label="`删除待办：${task.title}`" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
+            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-edit" :aria-label="'编辑待办：' + task.title" :disabled="taskSaving" @click="editTask(task)"><Icon name="edit" size="13" /></button><button class="task-delete" :aria-label="'删除待办：' + task.title" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
           </ul>
           <form class="dashboard-task-form" @submit.prevent="addTask"><input v-model="taskTitle" maxlength="120" aria-label="新待办事项" placeholder="添加今天要做的事" :disabled="taskSaving" /><select v-model="taskPriority" aria-label="新待办优先级" :disabled="taskSaving"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button type="submit" aria-label="添加待办" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="16" /></button></form>
           <p v-if="taskError" class="workspace-error" role="alert">{{ taskError }}</p>
           <div v-if="!tasks.length" class="dashboard-empty-copy">写下一件今天想推进的小事。</div>
         </article>
     </section>
+
+    <TaskEditorDialog :open="Boolean(editingTask)" :task="editingTask" @close="editingTask = null" @saved="editingTask = null" />
 
     <section class="book-preview-section">
       <div class="section-heading-row book-preview-heading"><div><span class="section-kicker">正在学习</span><h2>我的课程与书籍</h2></div><button class="text-button" @click="$emit('open-shelf')">前往书架 <Icon name="chevronRight" size="16" /></button></div>
@@ -253,12 +258,14 @@ async function toggleFeaturedFavorite() {
 .task-checkbox { flex: 0 0 16px; cursor: pointer; }
 .task-delete { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; margin-left: auto; border: 0; border-radius: 6px; color: #a7afba; background: transparent; cursor: pointer; }
 .task-delete:hover { color: #bb6e67; background: #fbf2f1; }
+.task-edit { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; border: 0; border-radius: 6px; color: #9aa5b2; background: transparent; cursor: pointer; }
+.task-edit:hover { color: #5e82b5; background: #f1f5fa; }
 .dashboard-task-form { display: flex; gap: 6px; margin-top: 14px; }
 .dashboard-task-form input { min-width: 0; flex: 1; height: 31px; box-sizing: border-box; padding: 0 9px; border: 1px solid #e8ebef; border-radius: 8px; outline: 0; color: #596779; background: #fff; font: inherit; font-size: 9px; }
 .dashboard-task-form select { width: 57px; height: 31px; padding: 0 5px; border: 1px solid #e8ebef; border-radius: 8px; color: #687485; background: #fff; font: inherit; font-size: 8px; }
 .dashboard-task-form select:disabled { opacity: .55; }
 .dashboard-task-form button:disabled { opacity: .55; cursor: wait; }
-.task-checkbox:disabled, .task-delete:disabled { opacity: .55; cursor: wait; }
+.task-checkbox:disabled, .task-delete:disabled, .task-edit:disabled { opacity: .55; cursor: wait; }
 .dashboard-task-form button { width: 31px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #fff; background: #6e98d4; cursor: pointer; }
 @media (max-width: 640px) { .no-book-card { min-height: 170px; padding: 17px; } }
 .dashboard-review-prompt { min-height: 60px; display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 10px 11px; border: 1px solid #edf0f3; border-radius: 12px; background: linear-gradient(115deg, #f7f9fc, #fbfcfa); }
