@@ -270,6 +270,22 @@ async function saveEvent() {
     return
   }
 
+  const conflicts = calendarEvents.value.filter((event) =>
+    event.date === draft.value.date
+    && String(event.id) !== String(draft.value.id ?? '')
+    && draft.value.start < event.end
+    && draft.value.end > event.start)
+  if (conflicts.length) {
+    const newline = String.fromCharCode(10)
+    const conflictSummary = conflicts.slice(0, 3)
+      .map((event) => event.start + '–' + event.end + ' ' + event.title)
+      .join(newline)
+    const additionalConflicts = conflicts.length > 3
+      ? newline + '另有 ' + (conflicts.length - 3) + ' 项重叠安排。'
+      : ''
+    if (!window.confirm('与已有日程时间重叠：' + newline + conflictSummary + additionalConflicts + newline + newline + '仍要保存吗？')) return
+  }
+
   const event = { ...draft.value, id: draft.value.id || createEventId() }
   const { id, ...data } = event
   formSaving.value = true
