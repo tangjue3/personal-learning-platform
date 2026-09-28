@@ -7,6 +7,7 @@ import Icon from './components/Icon.vue'
 import ReaderView from './components/ReaderView.vue'
 import SyncCenter from './components/SyncCenter.vue'
 import WorkspaceView from './components/WorkspaceView.vue'
+import WorkbenchView from './components/WorkbenchView.vue'
 import { listImportedBooks } from './services/libraryStore.js'
 import { listEbookFiles } from './services/ebookFileStore.js'
 import { listPendingEbooks, runEbookMigration } from './services/ebookMigration.js'
@@ -27,6 +28,7 @@ let reviewClockTimer = null
 
 const navigation = [
   { id: 'today', label: '今天', icon: 'today' },
+  { id: 'workbench', label: '工作台', icon: 'grid' },
   { id: 'shelf', label: '书架', icon: 'shelf' },
   { id: 'calendar', label: '日历', icon: 'calendar' },
   { id: 'notes', label: '笔记', icon: 'notes' },
@@ -269,7 +271,7 @@ function returnFromReader() {
 
       <div class="sidebar-section-label">空间</div>
       <nav class="primary-navigation" aria-label="主导航">
-        <button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ 'nav-item--active': activeNav === item.id }" @click="navigate(item.id)">
+        <button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ 'nav-item--active': activeNav === item.id }" :aria-label="item.label" :title="item.label" :aria-current="activeNav === item.id ? 'page' : undefined" @click="navigate(item.id)">
           <Icon :name="item.icon" size="19" /><span>{{ item.label }}</span><span v-if="item.id === 'review' && dueReviewCount" class="nav-count">{{ dueReviewCount }}</span>
         </button>
       </nav>
@@ -295,6 +297,7 @@ function returnFromReader() {
 
       <div class="page-scroller">
         <DashboardView v-if="currentPage === 'today'" :books="books" @open-reader="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" @start-review="startReviewFromDashboard" @create-review-card="createReviewCardFromDashboard" />
+        <WorkbenchView v-else-if="currentPage === 'workbench'" :books="books" @open-book="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" />
         <BookshelfView v-else-if="currentPage === 'shelf'" ref="bookshelfView" :books="books" @open-book="openBook" @book-imported="addBook" @book-removed="removeBook" />
         <CalendarView v-else-if="currentPage === 'calendar'" :books="books" />
         <WorkspaceView v-else-if="currentPage === 'notes' || currentPage === 'review'" ref="workspaceView" :kind="currentPage" :books="books" @open-note="openNoteLocation" />
@@ -305,7 +308,7 @@ function returnFromReader() {
     <ReaderView v-else-if="isReader" :key="activeBook?.id" :book="activeBook || books[0]" :initial-anchor="activeAnchor" @back="returnFromReader" @progress="updateBookProgress" />
 
     <nav v-if="!isReader" class="mobile-navigation" aria-label="移动端主导航">
-      <button v-for="item in navigation" :key="item.id" :class="{ active: activeNav === item.id }" @click="navigate(item.id)"><Icon :name="item.icon" size="19" /><span>{{ item.label }}</span></button>
+      <button v-for="item in navigation" :key="item.id" :class="{ active: activeNav === item.id }" :aria-label="item.label" :aria-current="activeNav === item.id ? 'page' : undefined" @click="navigate(item.id)"><Icon :name="item.icon" size="19" /><span>{{ item.label }}</span></button>
     </nav>
   </div>
 </template>

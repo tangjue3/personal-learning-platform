@@ -532,7 +532,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .note-updated { display: none; }
   .review-focus-card, .review-count-card { min-height: 220px; padding: 19px; }
   .mobile-navigation { position: fixed; z-index: 20; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-around; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid #e8ebef; background: rgba(255,255,255,.93); backdrop-filter: blur(18px); }
-  .mobile-navigation button { width: 20%; display: grid; justify-items: center; gap: 4px; padding: 2px 0; border: 0; color: #a1a9b5; background: transparent; font-size: 8px; cursor: pointer; }
+  .mobile-navigation button { width: 16.666%; display: grid; justify-items: center; gap: 4px; padding: 2px 0; border: 0; color: #a1a9b5; background: transparent; font-size: 8px; cursor: pointer; }
   .mobile-navigation button.active { color: #4b85e7; }
   .reader-topbar { height: 55px; grid-template-columns: 1fr auto; gap: 5px; padding: 0 10px; }
   .reader-book-back { gap: 4px; padding: 6px; font-size: 8px; }
@@ -651,4 +651,15 @@ body { min-width: 320px; }
   .real-note-card h2 { font-size: 14px; }
   .real-note-card p { font-size: 11px; }
   .notes-toolbar > div strong { font-size: 10px; }
+}
+
+/* Shelf readability on narrow screens */
+@media (max-width: 640px) {
+  .book-card-details { padding: 11px 10px 12px; }
+  .book-card-title-row h2 { font-size: 12px; line-height: 1.45; }
+  .book-card-title-row p { font-size: 10px; line-height: 1.45; }
+  .book-card-meta { display: flex; flex-wrap: wrap; gap: 3px 5px; font-size: 9px; line-height: 1.45; }
+  .book-progress { margin-top: 8px; }
+  .shelf-footer { font-size: 9px; line-height: 1.5; }
+  .mobile-navigation button { min-height: 42px; font-size: 9px; }
 }

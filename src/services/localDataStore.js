@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-const allowedLocalRecordKinds = new Set(['reader', 'calendar', 'note', 'task', 'review', 'preference'])
+const allowedLocalRecordKinds = new Set(['reader', 'calendar', 'note', 'task', 'review', 'preference', 'workspace'])
 
 export const localDataState = reactive({
   serviceAvailable: false,

@@ -17,8 +17,8 @@ const backupListBusy = ref(false)
 const snapshotError = ref('')
 const snapshotNotice = ref('')
 const snapshotRestorePreview = ref(null)
-const recordKinds = ['calendar', 'task', 'note', 'review', 'reader', 'preference']
-const localRecordCount = computed(() => ['calendar', 'task', 'note', 'review', 'reader', 'preference']
+const recordKinds = ['calendar', 'task', 'note', 'review', 'reader', 'preference', 'workspace']
+const localRecordCount = computed(() => ['calendar', 'task', 'note', 'review', 'reader', 'preference', 'workspace']
   .reduce((count, kind) => count + getLocalRecords(kind).length, 0))
 
 const buttonLabel = computed(() => {
