@@ -565,18 +565,18 @@ async function importCourse() {
 
     <div v-if="isImporterOpen" class="importer-backdrop" @click.self="closeImporter">
       <section class="importer-dialog" role="dialog" aria-modal="true" aria-labelledby="importer-title">
-        <header class="importer-header"><div><span class="importer-kicker">课程导入</span><h2 id="importer-title">把一门课程装进书架</h2><p>选择课程文件夹，或一次选中多篇 Markdown。文件会按名称自然排序。</p></div><button class="importer-close" aria-label="关闭导入窗口" @click="closeImporter">×</button></header>
+        <header class="importer-header"><div><span class="importer-kicker">课程导入</span><h2 id="importer-title">把一门课程装进书架</h2><p>选择课程文件夹，或一次选中多篇 Markdown。文件会按名称自然排序。</p></div><button class="importer-close" aria-label="关闭导入窗口" :disabled="isSaving" @click="closeImporter">×</button></header>
 
         <div class="importer-source-options">
-          <button class="importer-source" @click="folderInput?.click()"><span class="source-icon"><Icon name="shelf" size="20" /></span><span><strong>选择课程文件夹</strong><small>自动收集文件夹中的 .md 文档</small></span><Icon name="chevronRight" size="16" /></button>
-          <button class="importer-source" @click="filesInput?.click()"><span class="source-icon source-icon--blue"><Icon name="notes" size="19" /></span><span><strong>选择多篇 Markdown</strong><small>将所选文档合并为一本课程书</small></span><Icon name="chevronRight" size="16" /></button>
-          <input ref="folderInput" class="visually-hidden-input" type="file" webkitdirectory multiple @change="acceptFiles($event.target.files); $event.target.value = ''" />
-          <input ref="filesInput" class="visually-hidden-input" type="file" multiple accept=".md,.markdown,.png,.jpg,.jpeg,.webp,.gif,.avif,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/avif" @change="acceptFiles($event.target.files); $event.target.value = ''" />
+          <button class="importer-source" :disabled="isSaving" @click="folderInput?.click()"><span class="source-icon"><Icon name="shelf" size="20" /></span><span><strong>选择课程文件夹</strong><small>自动收集文件夹中的 .md 文档</small></span><Icon name="chevronRight" size="16" /></button>
+          <button class="importer-source" :disabled="isSaving" @click="filesInput?.click()"><span class="source-icon source-icon--blue"><Icon name="notes" size="19" /></span><span><strong>选择多篇 Markdown</strong><small>将所选文档合并为一本课程书</small></span><Icon name="chevronRight" size="16" /></button>
+          <input ref="folderInput" class="visually-hidden-input" type="file" webkitdirectory multiple :disabled="isSaving" @change="acceptFiles($event.target.files); $event.target.value = ''" />
+          <input ref="filesInput" class="visually-hidden-input" type="file" multiple accept=".md,.markdown,.png,.jpg,.jpeg,.webp,.gif,.avif,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/avif" :disabled="isSaving" @change="acceptFiles($event.target.files); $event.target.value = ''" />
         </div>
 
         <div v-if="selectedMarkdownFiles" class="importer-form">
-          <label class="importer-field"><span>课程名称</span><input v-model="courseTitle" type="text" maxlength="100" placeholder="例如：RAG 工程学习手册" /></label>
-          <label class="importer-field"><span>书架分类</span><select v-model="courseCategory"><option v-for="category in categories" :key="category" :value="category">{{ category }}</option></select></label>
+          <label class="importer-field"><span>课程名称</span><input v-model="courseTitle" type="text" maxlength="100" placeholder="例如：RAG 工程学习手册" :disabled="isSaving" /></label>
+          <label class="importer-field"><span>书架分类</span><select v-model="courseCategory" :disabled="isSaving"><option v-for="category in categories" :key="category" :value="category">{{ category }}</option></select></label>
           <div class="document-preview">
             <div class="document-preview-heading"><strong>导入检查</strong><span>{{ selectedMarkdownFiles }} 篇章节 · {{ formatFileSize(totalMarkdownBytes) }}</span></div>
             <ol class="document-preview-list"><li v-for="(file, index) in markdownFiles" :key="`${relativeFilePath(file)}-${index}`"><span class="preview-index">{{ String(index + 1).padStart(2, '0') }}</span><span class="preview-path">{{ relativeFilePath(file) }}</span><small>{{ formatFileSize(file.size) }}</small></li></ol>
