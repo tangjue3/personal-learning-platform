@@ -11,9 +11,11 @@ const noteActionError = ref('')
 const noteActionNotice = ref('')
 const editorBusy = ref(false)
 const searchText = ref('')
+const selectedTag = ref('')
 const reviewError = ref('')
 const reviewBusy = ref(false)
 const noteDraft = ref(emptyNote())
+let noteDraftBaseline = ''
 const cardDraft = ref(emptyCard())
 const reviewStage = ref('question')
 const sessionIds = ref([])
@@ -21,15 +23,29 @@ const sessionPosition = ref(0)
 const reviewClock = ref(Date.now())
 const cardFrontField = ref(null)
 
-function emptyNote() { return { id: '', title: '', content: '', excerpt: '', bookId: '', chapterId: '', chapterTitle: '', anchor: null, format: '', color: 'yellow', createdAt: '' } }
+function emptyNote() { return { id: '', title: '', content: '', excerpt: '', tags: '', bookId: '', chapterId: '', chapterTitle: '', anchor: null, format: '', color: 'yellow', createdAt: '' } }
+function normalizeTags(value) {
+  return [...new Set(String(value || '').split(/[,，\n]/).map((tag) => tag.trim().replace(/^#+/, '').slice(0, 24)).filter(Boolean))].slice(0, 8)
+}
 function emptyCard() { return { id: '', front: '', back: '', bookId: '', chapterId: '', dueAt: new Date().toISOString(), intervalDays: 0, repetitions: 0, easeFactor: 2.5 } }
 function makeId() { return window.crypto?.randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2) }
 
 const notes = computed(() => getLocalRecords('note'))
 const cards = computed(() => getLocalRecords('review'))
+const noteTagOptions = computed(() => {
+  const counts = new Map()
+  for (const note of notes.value) {
+    for (const tag of Array.isArray(note.tags) ? note.tags : []) counts.set(tag, (counts.get(tag) || 0) + 1)
+  }
+  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b, 'zh-CN')).map(([tag, count]) => ({ tag, count }))
+})
 const visibleNotes = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase()
-  return notes.value.filter((note) => !query || (note.title + ' ' + note.content + ' ' + note.excerpt).toLocaleLowerCase().includes(query))
+  return notes.value.filter((note) => {
+    const tags = Array.isArray(note.tags) ? note.tags : []
+    const searchable = [note.title, note.content, note.excerpt, tags.join(' ')].join(' ').toLocaleLowerCase()
+    return (!query || searchable.includes(query)) && (!selectedTag.value || tags.includes(selectedTag.value))
+  })
 })
 const dueCards = computed(() => {
   reviewClock.value
@@ -42,10 +58,21 @@ const cardChapters = computed(() => props.books.find((book) => book.id === cardD
 
 function openNewNote() {
   noteDraft.value = emptyNote()
+  noteDraftBaseline = JSON.stringify(noteDraft.value)
   editorError.value = ''
   editorOpen.value = true
 }
-function editNote(note) { noteDraft.value = { ...emptyNote(), ...note }; editorError.value = ''; editorOpen.value = true }
+function editNote(note) {
+  noteDraft.value = { ...emptyNote(), ...note, tags: Array.isArray(note.tags) ? note.tags.join(', ') : '' }
+  noteDraftBaseline = JSON.stringify(noteDraft.value)
+  editorError.value = ''
+  editorOpen.value = true
+}
+function closeEditor() {
+  if (editorBusy.value) return
+  if (JSON.stringify(noteDraft.value) !== noteDraftBaseline && !window.confirm('这条笔记有未保存的修改，确定丢弃吗？')) return
+  editorOpen.value = false
+}
 function canOpenNote(note) { return Boolean(note.bookId && (note.anchor || note.chapterId) && props.books.some((book) => book.id === note.bookId)) }
 function openNoteSource(note) { emit('open-note', note) }
 async function saveNote() {
@@ -57,6 +84,7 @@ async function saveNote() {
     await saveLocalRecord('note', id, {
       title: noteDraft.value.title.trim().slice(0, 120),
       content: noteDraft.value.content.trim(),
+      tags: normalizeTags(noteDraft.value.tags),
       excerpt: noteDraft.value.excerpt.trim(),
       bookId: noteDraft.value.bookId,
       chapterId: noteDraft.value.chapterId,
@@ -72,7 +100,7 @@ async function saveNote() {
   finally { editorBusy.value = false }
 }
 async function removeNote() {
-  if (!noteDraft.value.id) return
+  if (!noteDraft.value.id || editorBusy.value || !window.confirm('确定删除这条笔记吗？删除后可以从本机快照恢复。')) return
   editorBusy.value = true
   try { await deleteLocalRecord('note', noteDraft.value.id); editorOpen.value = false }
   catch (error) { editorError.value = error.message }
@@ -88,6 +116,29 @@ async function createCardFromNote(note) {
     })
     noteActionNotice.value = '已从笔记创建一张待复习卡片。'
   } catch (error) { noteActionError.value = error.message }
+}
+function exportVisibleNotes() {
+  if (!visibleNotes.value.length) return
+  const markdown = visibleNotes.value.map((note) => {
+    const tags = Array.isArray(note.tags) ? note.tags : []
+    const source = note.bookId ? `> 来源：${bookName(note.bookId)}${note.chapterTitle || chapterName(note.bookId, note.chapterId) ? ` · ${note.chapterTitle || chapterName(note.bookId, note.chapterId)}` : ''}` : ''
+    const tagLine = tags.length ? `> 标签：${tags.map((tag) => `#${tag}`).join(' ')}` : ''
+    const excerpt = note.excerpt ? `> ${note.excerpt.replace(/\r?\n/g, '\n> ')}` : ''
+    return [`## ${note.title}`, source, tagLine, excerpt, note.content || ''].filter(Boolean).join('\n\n')
+  }).join('\n\n---\n\n')
+  const blob = new Blob([`# 知序学习笔记\n\n${markdown}\n`], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const now = new Date()
+  const fileDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  link.href = url
+  link.download = `知序笔记-${fileDate}.md`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  noteActionError.value = ''
+  noteActionNotice.value = `已导出当前列表中的 ${visibleNotes.value.length} 条笔记。`
 }
 function startReview() { reviewClock.value = Date.now(); reviewError.value = ''; sessionIds.value = dueCards.value.map((card) => card.id); sessionPosition.value = 0; reviewStage.value = 'question' }
 function scheduleAfterRating(card, rating) {
@@ -132,6 +183,7 @@ async function saveCard() {
   finally { reviewBusy.value = false }
 }
 async function removeCard(card) {
+  if (!window.confirm('确定删除这张复习卡片吗？')) return
   try { await deleteLocalRecord('review', card.id) }
   catch (error) { reviewError.value = error.message }
 }
@@ -144,6 +196,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
+defineExpose({ startReview, focusNewCard: startNewCard })
 </script>
 
 <template>
@@ -154,15 +207,25 @@ function formatDate(value) {
       <button v-else class="button button-primary" @click="startNewCard"><Icon name="plus" size="17" /> 新建卡片</button>
     </header>
     <template v-if="kind === 'notes'">
-      <section class="notes-toolbar surface-card"><div><span class="section-kicker">私人知识库</span><strong>{{ notes.length }} 条笔记</strong></div><label class="search-field"><Icon name="search" size="16" /><input v-model="searchText" type="search" placeholder="搜索笔记内容" /></label></section>
+            <section class="notes-toolbar surface-card">
+        <div><span class="section-kicker">私人知识库</span><strong>{{ notes.length }} 条笔记</strong></div>
+        <div class="notes-toolbar-actions">
+          <label class="search-field"><Icon name="search" size="16" /><input v-model="searchText" type="search" placeholder="搜索标题、内容或标签" /></label>
+          <button type="button" class="button button-secondary notes-export-button" :disabled="!visibleNotes.length" title="将当前筛选结果下载为本机 Markdown 文件" @click="exportVisibleNotes"><Icon name="download" size="15" /> 导出 Markdown</button>
+        </div>
+      </section>
+      <div v-if="noteTagOptions.length" class="notes-tag-bar" role="group" aria-label="按标签筛选笔记">
+        <button type="button" class="note-tag-filter" :class="{ 'is-active': !selectedTag }" :aria-pressed="!selectedTag" @click="selectedTag = ''">全部 <span>{{ notes.length }}</span></button>
+        <button v-for="item in noteTagOptions" :key="item.tag" type="button" class="note-tag-filter" :class="{ 'is-active': selectedTag === item.tag }" :aria-pressed="selectedTag === item.tag" @click="selectedTag = selectedTag === item.tag ? '' : item.tag">{{ item.tag }} <span>{{ item.count }}</span></button>
+      </div>
       <p v-if="noteActionError" class="workspace-error" role="alert">{{ noteActionError }}</p><p v-if="noteActionNotice" class="workspace-notice" role="status">{{ noteActionNotice }}</p>
       <section v-if="visibleNotes.length" class="real-notes-grid">
         <article v-for="note in visibleNotes" :key="note.id" class="real-note-card surface-card">
-          <button class="real-note-open" @click="editNote(note)"><span v-if="note.bookId" class="real-note-source">{{ bookName(note.bookId) }}<template v-if="note.chapterTitle || chapterName(note.bookId, note.chapterId)"> · {{ note.chapterTitle || chapterName(note.bookId, note.chapterId) }}</template></span><h2>{{ note.title }}</h2><blockquote v-if="note.excerpt" class="real-note-excerpt">{{ note.excerpt }}</blockquote><p v-if="note.content">{{ note.content }}</p><span class="real-note-date">更新于 {{ formatDate(note.updatedAt) }}</span></button>
+          <button class="real-note-open" @click="editNote(note)"><span v-if="note.bookId" class="real-note-source">{{ bookName(note.bookId) }}<template v-if="note.chapterTitle || chapterName(note.bookId, note.chapterId)"> · {{ note.chapterTitle || chapterName(note.bookId, note.chapterId) }}</template></span><div v-if="note.tags?.length" class="real-note-tags"><span v-for="tag in note.tags" :key="tag">{{ tag }}</span></div><h2>{{ note.title }}</h2><blockquote v-if="note.excerpt" class="real-note-excerpt">{{ note.excerpt }}</blockquote><p v-if="note.content">{{ note.content }}</p><span class="real-note-date">更新于 {{ formatDate(note.updatedAt) }}</span></button>
           <footer><div class="real-note-actions"><button class="text-button" @click="createCardFromNote(note)"><Icon name="review" size="14" /> 制作复习卡</button><button v-if="canOpenNote(note)" class="text-button" @click="openNoteSource(note)"><Icon name="arrowRight" size="14" /> 阅读原文</button></div><button class="icon-button" aria-label="编辑笔记" @click="editNote(note)"><Icon name="edit" size="15" /></button></footer>
         </article>
       </section>
-      <div v-else class="workspace-empty surface-card"><span class="overview-icon"><Icon name="notes" size="20" /></span><h2>{{ searchText ? '没有找到相关笔记' : '从第一条笔记开始' }}</h2><p>{{ searchText ? '试试其他关键词。' : '阅读时记录重点、问题和自己的理解。笔记只保存在本机，不会同步到 GitHub。' }}</p><button v-if="!searchText" class="button button-primary" @click="openNewNote"><Icon name="plus" size="15" /> 新建第一条笔记</button></div>
+      <div v-else class="workspace-empty surface-card"><span class="overview-icon"><Icon name="notes" size="20" /></span><h2>{{ searchText || selectedTag ? '没有找到符合条件的笔记' : '从第一条笔记开始' }}</h2><p>{{ searchText || selectedTag ? '清除搜索或标签筛选试试。' : '阅读时记录重点、问题和自己的理解。笔记只保存在本机，不会同步到 GitHub。' }}</p><button v-if="!searchText && !selectedTag" class="button button-primary" @click="openNewNote"><Icon name="plus" size="15" /> 新建第一条笔记</button><button v-else class="text-button" @click="searchText = ''; selectedTag = ''">清除筛选</button></div>
     </template>
 
     <template v-else>
@@ -191,8 +254,8 @@ function formatDate(value) {
       <section v-if="cards.length" class="review-card-list"><div class="section-heading-row"><div><span class="section-kicker">全部卡片</span><h2>复习队列</h2></div></div><article v-for="card in cards" :key="card.id" class="review-list-row surface-card"><div><strong>{{ card.front }}</strong><span>{{ bookName(card.bookId) || '未关联书籍' }}<template v-if="chapterName(card.bookId, card.chapterId)"> · {{ chapterName(card.bookId, card.chapterId) }}</template></span></div><span class="review-due-pill" :class="{ 'is-due': !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() }">{{ !card.dueAt || new Date(card.dueAt).getTime() <= Date.now() ? '待复习' : formatDate(card.dueAt) }}</span><button class="icon-button" aria-label="删除复习卡片" @click="removeCard(card)"><Icon name="trash" size="15" /></button></article></section>
     </template>
 
-    <div v-if="editorOpen" class="workspace-modal-backdrop" @click.self="editorOpen = false">
-      <form class="workspace-modal" @submit.prevent="saveNote"><header><div><span class="section-kicker">私人笔记</span><h2>{{ noteDraft.id ? '编辑笔记' : '新建笔记' }}</h2></div><button type="button" class="icon-button" aria-label="关闭" @click="editorOpen = false"><Icon name="close" size="17" /></button></header><label class="workspace-field"><span>标题</span><input v-model="noteDraft.title" maxlength="120" required placeholder="给这条笔记起个名字" /></label><label class="workspace-field"><span>摘录原文 · 可选</span><textarea v-model="noteDraft.excerpt" rows="3" maxlength="3000" placeholder="保存的原文摘录"></textarea></label><label class="workspace-field"><span>我的笔记 · 支持 Markdown</span><textarea v-model="noteDraft.content" rows="7" placeholder="记录理解、疑问或下一步行动"></textarea></label><div class="workspace-form-row"><label class="workspace-field"><span>关联书籍</span><select v-model="noteDraft.bookId"><option value="">不关联书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label v-if="noteChapters.length" class="workspace-field"><span>章节</span><select v-model="noteDraft.chapterId"><option value="">未指定章节</option><option v-for="chapter in noteChapters" :key="chapter.id" :value="chapter.id">{{ chapter.title }}</option></select></label></div><p v-if="editorError" class="workspace-error" role="alert">{{ editorError }}</p><footer><button v-if="noteDraft.id" type="button" class="workspace-delete-button" :disabled="editorBusy" @click="removeNote">删除笔记</button><span v-else></span><div><button type="button" class="button button-secondary" @click="editorOpen = false">取消</button><button type="submit" class="button button-primary" :disabled="editorBusy">{{ editorBusy ? '保存中…' : '保存笔记' }}</button></div></footer></form>
+    <div v-if="editorOpen" class="workspace-modal-backdrop" @click.self="closeEditor">
+      <form class="workspace-modal" @submit.prevent="saveNote"><header><div><span class="section-kicker">私人笔记</span><h2>{{ noteDraft.id ? '编辑笔记' : '新建笔记' }}</h2></div><button type="button" class="icon-button" aria-label="关闭" :disabled="editorBusy" @click="closeEditor"><Icon name="close" size="17" /></button></header><label class="workspace-field"><span>标题</span><input v-model="noteDraft.title" maxlength="120" required placeholder="给这条笔记起个名字" /></label><label class="workspace-field"><span>摘录原文 · 可选</span><textarea v-model="noteDraft.excerpt" rows="3" maxlength="3000" placeholder="保存的原文摘录"></textarea></label><label class="workspace-field"><span>标签 · 逗号分隔</span><input v-model="noteDraft.tags" maxlength="240" placeholder="例如：RAG，面试重点，待验证" /></label><label class="workspace-field"><span>我的笔记 · 支持 Markdown</span><textarea v-model="noteDraft.content" rows="7" placeholder="记录理解、疑问或下一步行动"></textarea></label><div class="workspace-form-row"><label class="workspace-field"><span>关联书籍</span><select v-model="noteDraft.bookId"><option value="">不关联书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label v-if="noteChapters.length" class="workspace-field"><span>章节</span><select v-model="noteDraft.chapterId"><option value="">未指定章节</option><option v-for="chapter in noteChapters" :key="chapter.id" :value="chapter.id">{{ chapter.title }}</option></select></label></div><p v-if="editorError" class="workspace-error" role="alert">{{ editorError }}</p><footer><button v-if="noteDraft.id" type="button" class="workspace-delete-button" :disabled="editorBusy" @click="removeNote">删除笔记</button><span v-else></span><div><button type="button" class="button button-secondary" :disabled="editorBusy" @click="closeEditor">取消</button><button type="submit" class="button button-primary" :disabled="editorBusy">{{ editorBusy ? '保存中…' : '保存笔记' }}</button></div></footer></form>
     </div>
   </main>
 </template>
@@ -259,4 +322,15 @@ function formatDate(value) {
 .workspace-delete-button { border: 0; color: #b36862; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
 .workspace-modal .button { min-height: 34px; font-size: 9px; }
 @media (max-width: 640px) { .real-notes-grid, .real-review-grid, .card-editor-fields, .workspace-form-row { grid-template-columns: 1fr; } .notes-toolbar { align-items: stretch; flex-direction: column; } .notes-toolbar .search-field { width: 100%; box-sizing: border-box; } .review-ratings { grid-template-columns: repeat(2, minmax(0, 1fr)); } .workspace-modal-backdrop { align-items: end; padding: 0; } .workspace-modal { width: 100%; max-height: 88vh; box-sizing: border-box; border-radius: 17px 17px 0 0; } }
+.notes-toolbar-actions { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.notes-toolbar-actions .search-field { min-height: 38px; }
+.notes-export-button { min-height: 38px; padding: 0 11px; font-size: 10px; white-space: nowrap; }
+.notes-tag-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: -4px 0 15px; }
+.note-tag-filter { min-height: 30px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid #e5e9e5; border-radius: 999px; color: #778496; background: rgba(255,255,255,.75); font: inherit; font-size: 10px; cursor: pointer; transition: border-color .18s ease, background .18s ease, color .18s ease; }
+.note-tag-filter span { color: #a0a9b4; font-size: 9px; }
+.note-tag-filter:hover, .note-tag-filter.is-active { border-color: #d6e2ef; color: #4e79b4; background: #f0f5fb; }
+.note-tag-filter.is-active span { color: #6c8fb8; }
+.real-note-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.real-note-tags span { padding: 4px 7px; border-radius: 6px; color: #6d829d; background: #eef3f8; font-size: 9px; line-height: 1.2; }
+@media (max-width: 640px) { .notes-toolbar-actions { width: 100%; align-items: stretch; } .notes-toolbar-actions .search-field { width: auto; min-width: 0; flex: 1; } .notes-export-button { flex: 0 0 auto; padding: 0 8px; font-size: 9px; } }
 </style>
