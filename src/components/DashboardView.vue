@@ -5,9 +5,11 @@ import Icon from './Icon.vue'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
-const emit = defineEmits(['open-reader', 'open-calendar', 'open-shelf'])
+const emit = defineEmits(['open-reader', 'open-calendar', 'open-shelf', 'start-review', 'create-review-card'])
 const taskTitle = ref('')
+const taskPriority = ref('normal')
 const taskError = ref('')
+const taskSaving = ref(false)
 const currentTime = ref(new Date())
 const favoriteError = ref('')
 let clockTimer = null
@@ -35,9 +37,21 @@ const events = computed(() => getLocalRecords('calendar')
     const tone = { 学习: 'blue', 工作: 'violet', 生活: 'peach', 待办: 'mint' }[event.category] || 'blue'
     return { ...event, tone, detail: props.books.find((book) => book.id === event.bookId)?.title || event.category || '日程', state: now < event.start ? '待开始' : now < event.end ? '进行中' : '已结束' }
   }))
+const taskPriorityRank = { high: 0, normal: 1, low: 2 }
+function normalizedPriority(task) { return Object.hasOwn(taskPriorityRank, task.priority) ? task.priority : 'normal' }
+function priorityRank(task) { return taskPriorityRank[normalizedPriority(task)] }
 const tasks = computed(() => getLocalRecords('task')
   .filter((task) => !task.dueDate || task.dueDate <= todayKey.value)
-  .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done)) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+  .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done))
+    || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31'))
+    || priorityRank(a) - priorityRank(b)
+    || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+const reviewCards = computed(() => getLocalRecords('review'))
+const dueReviewCards = computed(() => {
+  const now = currentTime.value.getTime()
+  return reviewCards.value.filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= now)
+})
+const dueReviewCount = computed(() => dueReviewCards.value.length)
 const week = computed(() => {
   const monday = new Date(currentTime.value)
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
@@ -65,24 +79,45 @@ const greeting = computed(() => {
 const todayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(currentTime.value))
 async function addTask() {
   const title = taskTitle.value.trim()
-  if (!title) return
+  if (!title || taskSaving.value) return
   taskError.value = ''
+  taskSaving.value = true
   try {
     await saveLocalRecord('task', window.crypto?.randomUUID?.() || String(Date.now()), {
-      title: title.slice(0, 120), done: false, dueDate: todayKey.value, createdAt: new Date().toISOString(),
+      title: title.slice(0, 120), done: false, dueDate: todayKey.value, priority: taskPriority.value, createdAt: new Date().toISOString(),
     })
     taskTitle.value = ''
+    taskPriority.value = 'normal'
   } catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
 }
 async function toggleTask(task) {
+  if (taskSaving.value) return
+  taskError.value = ''
+  taskSaving.value = true
   try {
     const { id, updatedAt, ...data } = task
     await saveLocalRecord('task', id, { ...data, done: !task.done, doneAt: !task.done ? new Date().toISOString() : '' })
   } catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
+async function updateTaskPriority(task, priority) {
+  if (taskSaving.value || !Object.hasOwn(taskPriorityRank, priority) || priorityRank(task) === taskPriorityRank[priority]) return
+  taskError.value = ''
+  taskSaving.value = true
+  try {
+    const { id, updatedAt, ...data } = task
+    await saveLocalRecord('task', id, { ...data, priority })
+  } catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
 }
 async function removeTask(task) {
+  if (taskSaving.value) return
+  taskError.value = ''
+  taskSaving.value = true
   try { await deleteLocalRecord('task', task.id) }
   catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
 }
 async function toggleFeaturedFavorite() {
   if (!featuredBook.value) return
@@ -142,7 +177,16 @@ async function toggleFeaturedFavorite() {
             <span>{{ day.label }}</span>
           </div>
         </div>
-        <div class="week-note"><span class="note-quote">“</span><p>学习不是一蹴而就，<br />而是让优秀成为一种习惯。</p></div>
+        <div class="dashboard-review-prompt" :class="{ 'dashboard-review-prompt--ready': dueReviewCount, 'dashboard-review-prompt--empty': !dueReviewCount && !reviewCards.length }">
+          <span class="dashboard-review-icon"><Icon name="review" size="16" /></span>
+          <div class="dashboard-review-copy">
+            <strong>{{ dueReviewCount ? `${dueReviewCount} 张卡片待复习` : reviewCards.length ? '暂无到期卡片' : '建立你的复习卡片' }}</strong>
+            <span>{{ dueReviewCount ? '花几分钟回忆，帮助知识留得更久' : reviewCards.length ? '卡片到期后会出现在这里' : '从课程笔记创建卡片，或手动添加' }}</span>
+          </div>
+          <button v-if="dueReviewCount" class="dashboard-review-action" @click="$emit('start-review')">开始复习 <Icon name="arrowRight" size="14" /></button>
+          <button v-else-if="!reviewCards.length" class="dashboard-review-action dashboard-review-action--quiet" @click="$emit('create-review-card')">添加卡片 <Icon name="arrowRight" size="14" /></button>
+          <span v-else class="dashboard-review-complete">无待复习</span>
+        </div>
         <div class="week-footer"><span>本周已学习 {{ daysThisWeek }} 天</span><button class="tiny-link" @click="$emit('open-shelf')">查看学习进度</button></div>
       </article>
     </section>
@@ -164,9 +208,9 @@ async function toggleFeaturedFavorite() {
         <article class="task-card surface-card">
           <div class="section-heading-row"><div><span class="section-kicker">轻轻推进</span><h2>今天的待办</h2></div><span class="task-count">{{ tasks.filter((task) => !task.done).length }} 项未完成</span></div>
           <ul class="task-list">
-            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span>{{ task.title }}</span><button class="task-delete" aria-label="删除待办" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
+            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-delete" :aria-label="`删除待办：${task.title}`" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
           </ul>
-          <form class="dashboard-task-form" @submit.prevent="addTask"><input v-model="taskTitle" maxlength="120" aria-label="新待办事项" placeholder="添加今天要做的事" /><button type="submit" aria-label="添加待办"><Icon name="plus" size="16" /></button></form>
+          <form class="dashboard-task-form" @submit.prevent="addTask"><input v-model="taskTitle" maxlength="120" aria-label="新待办事项" placeholder="添加今天要做的事" :disabled="taskSaving" /><select v-model="taskPriority" aria-label="新待办优先级" :disabled="taskSaving"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button type="submit" aria-label="添加待办" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="16" /></button></form>
           <p v-if="taskError" class="workspace-error" role="alert">{{ taskError }}</p>
           <div v-if="!tasks.length" class="dashboard-empty-copy">写下一件今天想推进的小事。</div>
         </article>
@@ -201,11 +245,33 @@ async function toggleFeaturedFavorite() {
 .dashboard-empty-copy .text-button { margin-left: 5px; }
 .task-count { color: #9aa4b1; font-size: 8px; }
 .task-list li { display: flex; align-items: center; gap: 9px; }
+.task-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-priority-select { min-height: 25px; flex: 0 0 48px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7c8795; background: transparent; font: inherit; font-size: 8px; cursor: pointer; }
+.task-priority-select:focus-visible { border-color: #dce5f1; outline: 2px solid rgba(89,139,218,.12); }
+.task-priority-select:disabled { opacity: .55; cursor: wait; }
 .task-checkbox { flex: 0 0 16px; cursor: pointer; }
 .task-delete { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; margin-left: auto; border: 0; border-radius: 6px; color: #a7afba; background: transparent; cursor: pointer; }
 .task-delete:hover { color: #bb6e67; background: #fbf2f1; }
 .dashboard-task-form { display: flex; gap: 6px; margin-top: 14px; }
 .dashboard-task-form input { min-width: 0; flex: 1; height: 31px; box-sizing: border-box; padding: 0 9px; border: 1px solid #e8ebef; border-radius: 8px; outline: 0; color: #596779; background: #fff; font: inherit; font-size: 9px; }
+.dashboard-task-form select { width: 57px; height: 31px; padding: 0 5px; border: 1px solid #e8ebef; border-radius: 8px; color: #687485; background: #fff; font: inherit; font-size: 8px; }
+.dashboard-task-form select:disabled { opacity: .55; }
+.dashboard-task-form button:disabled { opacity: .55; cursor: wait; }
+.task-checkbox:disabled, .task-delete:disabled { opacity: .55; cursor: wait; }
 .dashboard-task-form button { width: 31px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #fff; background: #6e98d4; cursor: pointer; }
 @media (max-width: 640px) { .no-book-card { min-height: 170px; padding: 17px; } }
+.dashboard-review-prompt { min-height: 60px; display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 10px 11px; border: 1px solid #edf0f3; border-radius: 12px; background: linear-gradient(115deg, #f7f9fc, #fbfcfa); }
+.dashboard-review-icon { width: 31px; height: 31px; flex: 0 0 31px; display: grid; place-items: center; border-radius: 9px; color: #648ac1; background: #eaf1fa; }
+.dashboard-review-prompt--ready { border-color: #e4ebf4; background: linear-gradient(115deg, #f2f6fc, #fbfcfa); }
+.dashboard-review-prompt--ready .dashboard-review-icon { color: #4f7fba; background: #e4eef9; }
+.dashboard-review-prompt--empty .dashboard-review-icon { color: #789b88; background: #edf4ef; }
+.dashboard-review-copy { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.dashboard-review-copy strong { overflow: hidden; color: #506075; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-review-copy span { overflow: hidden; color: #8793a2; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-review-action { min-height: 30px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-radius: 8px; color: #fff; background: #618bc3; font: inherit; font-size: 9px; font-weight: 600; cursor: pointer; transition: background .18s ease, transform .18s ease; }
+.dashboard-review-action:hover { background: #4e7cb7; transform: translateY(-1px); }
+.dashboard-review-action--quiet { color: #63866f; background: #eaf2ec; }
+.dashboard-review-action--quiet:hover { background: #dfece2; }
+.dashboard-review-complete { flex: 0 0 auto; padding: 5px 7px; border-radius: 7px; color: #6f9880; background: #edf5ef; font-size: 9px; }
+@media (max-width: 640px) { .dashboard-review-prompt { gap: 8px; margin-top: 14px; padding: 9px; } .dashboard-review-copy strong { font-size: 9px; } .dashboard-review-copy span { font-size: 8px; } .dashboard-review-action { min-height: 28px; padding: 0 7px; font-size: 8px; } }
 </style>

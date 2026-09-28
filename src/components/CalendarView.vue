@@ -13,6 +13,7 @@ const formSaving = ref(false)
 const draft = ref(createEmptyDraft())
 const storageStatus = ref('')
 const taskTitle = ref('')
+const taskPriority = ref('normal')
 const taskError = ref('')
 const taskSaving = ref(false)
 let draftBaseline = ''
@@ -211,9 +212,14 @@ const periodTitle = computed(() => {
 
 const selectedDateKey = computed(() => toDateKey(focusDate.value))
 const selectedDateLabel = computed(() => new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(focusDate.value))
+const taskPriorityRank = { high: 0, normal: 1, low: 2 }
+function normalizedPriority(task) { return Object.hasOwn(taskPriorityRank, task.priority) ? task.priority : 'normal' }
+function priorityRank(task) { return taskPriorityRank[normalizedPriority(task)] }
 const selectedDateTasks = computed(() => calendarTasks.value
   .filter((task) => task.dueDate === selectedDateKey.value)
-  .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done)) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+  .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done))
+    || priorityRank(a) - priorityRank(b)
+    || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
 const unscheduledOpenTasks = computed(() => calendarTasks.value
   .filter((task) => !task.done && !isValidDateKey(task.dueDate))
   .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
@@ -316,9 +322,10 @@ async function addTaskForSelectedDate() {
   taskSaving.value = true
   try {
     await saveLocalRecord('task', createEventId(), {
-      title: title.slice(0, 120), done: false, dueDate: selectedDateKey.value, createdAt: new Date().toISOString(),
+      title: title.slice(0, 120), done: false, dueDate: selectedDateKey.value, priority: taskPriority.value, createdAt: new Date().toISOString(),
     })
     taskTitle.value = ''
+    taskPriority.value = 'normal'
   } catch (error) { taskError.value = error.message }
   finally { taskSaving.value = false }
 }
@@ -328,6 +335,15 @@ async function toggleCalendarTask(task) {
   taskSaving.value = true
   const { id, updatedAt, ...data } = task
   try { await saveLocalRecord('task', id, { ...data, done: !task.done, doneAt: !task.done ? new Date().toISOString() : '' }) }
+  catch (error) { taskError.value = error.message }
+  finally { taskSaving.value = false }
+}
+async function updateCalendarTaskPriority(task, priority) {
+  if (taskSaving.value || !Object.hasOwn(taskPriorityRank, priority) || priorityRank(task) === taskPriorityRank[priority]) return
+  taskError.value = ''
+  taskSaving.value = true
+  const { id, updatedAt, ...data } = task
+  try { await saveLocalRecord('task', id, { ...data, priority }) }
   catch (error) { taskError.value = error.message }
   finally { taskSaving.value = false }
 }
@@ -434,6 +450,7 @@ function eventGridRowEnd(event) {
         <li v-for="task in selectedDateTasks" :key="task.id" class="calendar-task-row" :class="{ 'is-done': task.done }">
           <button type="button" class="calendar-task-toggle" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :aria-pressed="task.done" @click="toggleCalendarTask(task)" :disabled="taskSaving"><Icon v-if="task.done" name="check" size="13" /></button>
           <span class="calendar-task-title">{{ task.title }}</span>
+          <select class="calendar-task-priority" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateCalendarTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select>
           <button type="button" class="calendar-task-delete" :aria-label="`删除待办：${task.title}`" @click="removeCalendarTask(task)" :disabled="taskSaving"><Icon name="trash" size="14" /></button>
         </li>
       </ul>
@@ -449,6 +466,7 @@ function eventGridRowEnd(event) {
       </details>
       <form class="calendar-task-form" @submit.prevent="addTaskForSelectedDate">
         <input v-model.trim="taskTitle" type="text" maxlength="120" required :disabled="taskSaving" :aria-label="`添加 ${selectedDateLabel} 的待办`" placeholder="添加这一天要完成的事" />
+        <select v-model="taskPriority" aria-label="新待办优先级" :disabled="taskSaving"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select>
         <button type="submit" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="15" /> {{ taskSaving ? '保存中…' : '添加待办' }}</button>
       </form>
     </section>
@@ -573,6 +591,11 @@ function eventGridRowEnd(event) {
 .calendar-task-form { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0ed; }
 .calendar-task-form input { min-width: 0; min-height: 38px; flex: 1; padding: 0 11px; border: 1px solid #e5e9e5; border-radius: 10px; outline: 0; color: #4c5a6d; background: #fcfdfb; font: inherit; font-size: 11px; }
 .calendar-task-form input:focus { border-color: #a9c1df; box-shadow: 0 0 0 3px rgba(87,137,211,.1); }
+.calendar-task-form select { width: 64px; flex: 0 0 64px; min-height: 38px; padding: 0 6px; border: 1px solid #e5e9e5; border-radius: 9px; color: #637184; background: #fcfdfb; font: inherit; font-size: 10px; }
+.calendar-task-form select:disabled { opacity: .55; }
+.calendar-task-priority { flex: 0 0 48px; min-height: 27px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7e8997; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
+.calendar-task-priority:focus-visible { border-color: #dce5f1; outline: 2px solid rgba(89,139,218,.12); }
+.calendar-task-priority:disabled { opacity: .55; cursor: wait; }
 .calendar-task-form button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 10px; color: #fff; background: #5e89c4; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
 .calendar-task-form button:disabled { opacity: .5; cursor: not-allowed; }
 .calendar-task-error { margin: 10px 0; color: #b65f58; font-size: 10px; }
