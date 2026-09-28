@@ -15,6 +15,7 @@ const emit = defineEmits(['open-book', 'book-imported', 'book-removed'])
 const searchText = ref('')
 const searchInput = ref(null)
 const activeFilter = ref('全部')
+const statusFilter = ref('all')
 const filters = ['全部', '技术', '人工智能', '产品设计', '通用能力']
 const categories = filters.slice(1)
 const isImporterOpen = ref(false)
@@ -37,6 +38,13 @@ const confirmBookDelete = ref(false)
 const isManagedEbook = computed(() => ['epub', 'pdf'].includes(managedBook.value?.format))
 
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
+
+function readingStatus(book) {
+  const progress = Math.max(0, Math.min(100, Number(book.progress) || 0))
+  if (progress >= 100) return 'completed'
+  if (progress > 0 || book.lastRead || book.lastReadAt) return 'inProgress'
+  return 'notStarted'
+}
 
 const searchIndex = computed(() => props.books.map((book) => ({
   book,
@@ -62,6 +70,7 @@ const chapterSearch = computed(() => {
 
   for (const indexedBook of searchIndex.value) {
     if (activeFilter.value !== '全部' && indexedBook.book.category !== activeFilter.value) continue
+    if (statusFilter.value !== 'all' && readingStatus(indexedBook.book) !== statusFilter.value) continue
     for (const chapter of indexedBook.documents) {
       const contentIndex = chapter.normalizedContent.indexOf(query)
       const titleIndex = chapter.normalizedTitle.indexOf(query)
@@ -112,7 +121,8 @@ const visibleBooks = computed(() => {
     const matchesQuery = !query || metadata.includes(query)
       || documents.some((document) => document.normalizedTitle.includes(query) || document.normalizedContent.includes(query))
     const matchesFilter = activeFilter.value === '全部' || book.category === activeFilter.value
-    return matchesQuery && matchesFilter
+    const matchesStatus = statusFilter.value === 'all' || readingStatus(book) === statusFilter.value
+    return matchesQuery && matchesFilter && matchesStatus
   }).map(({ book }) => book)
   const compareTitle = (a, b) => collator.compare(a.title, b.title)
   return filtered.sort((a, b) => {
@@ -498,6 +508,7 @@ async function importCourse() {
       </div>
       <div class="shelf-actions">
         <label class="search-field shelf-search"><Icon name="search" size="17" /><input ref="searchInput" v-model="searchText" type="search" aria-label="搜索书名、章节或正文" placeholder="搜索书名、章节或正文..." /></label>
+        <label class="sort-control status-control"><Icon name="check" size="15" /><select v-model="statusFilter" aria-label="按阅读状态筛选"><option value="all">全部状态</option><option value="notStarted">未开始</option><option value="inProgress">阅读中</option><option value="completed">已读完</option></select></label>
         <label class="sort-control"><Icon name="filter" size="16" /><select v-model="sortMode" aria-label="书籍排序"><option value="title">按书名</option><option value="recent">最近阅读</option><option value="progress">阅读进度</option><option value="chapters">章节数量</option></select></label>
       </div>
     </section>
@@ -530,7 +541,7 @@ async function importCourse() {
         </div>
       </article>
     </section>
-    <div v-else class="empty-state surface-card"><span class="empty-state-icon"><Icon :name="books.length ? 'search' : 'shelf'" size="22" /></span><h2>{{ books.length ? '没有找到这本书' : '你的书架还没有书' }}</h2><p>{{ books.length ? '试试其他关键词或分类。' : '导入一门 Markdown 课程，或把 EPUB、PDF 电子书放进本机书架。' }}</p><button v-if="books.length" class="text-button" @click="searchText = ''; activeFilter = '全部'">清除筛选</button><div v-else class="shelf-empty-actions"><button class="button button-secondary" @click="isEbookImporterOpen = true"><Icon name="shelf" size="15" /> 导入电子书</button><button class="button button-primary" @click="startImport"><Icon name="plus" size="15" /> 导入课程</button></div></div>
+    <div v-else class="empty-state surface-card"><span class="empty-state-icon"><Icon :name="books.length ? 'search' : 'shelf'" size="22" /></span><h2>{{ books.length ? '没有找到这本书' : '你的书架还没有书' }}</h2><p>{{ books.length ? '清除搜索、分类或阅读状态筛选试试。' : '导入一门 Markdown 课程，或把 EPUB、PDF 电子书放进本机书架。' }}</p><button v-if="books.length" class="text-button" @click="searchText = ''; activeFilter = '全部'; statusFilter = 'all'">清除筛选</button><div v-else class="shelf-empty-actions"><button class="button button-secondary" @click="isEbookImporterOpen = true"><Icon name="shelf" size="15" /> 导入电子书</button><button class="button button-primary" @click="startImport"><Icon name="plus" size="15" /> 导入课程</button></div></div>
 
     <footer class="shelf-footer"><span>共 {{ visibleBooks.length }} 本学习书籍</span><span>每门课程，都有自己的阅读节奏。</span></footer>
 
@@ -610,6 +621,7 @@ async function importCourse() {
 .chapter-search-result:focus-visible { outline: 3px solid rgb(70 111 208 / 30%); outline-offset: -3px; }
 .sort-control { min-height: 34px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid #e9edf1; border-radius: 9px; color: #9aa4b1; background: rgba(255,255,255,.7); }
 .sort-control select { max-width: 86px; border: 0; outline: 0; color: #758194; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
+.status-control select { max-width: 80px; }
 .management-dialog { width: min(100%, 470px); }
 .shelf-import-actions, .shelf-empty-actions { display: flex; align-items: center; gap: 8px; }
 .shelf-empty-actions { justify-content: center; }
