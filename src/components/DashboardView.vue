@@ -43,6 +43,16 @@ const events = computed(() => getLocalRecords('calendar')
 const taskPriorityRank = { high: 0, normal: 1, low: 2 }
 function normalizedPriority(task) { return Object.hasOwn(taskPriorityRank, task.priority) ? task.priority : 'normal' }
 function priorityRank(task) { return taskPriorityRank[normalizedPriority(task)] }
+function taskDueLabel(task) {
+  if (!task.dueDate) return '未安排'
+  if (typeof task.dueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) return '日期异常'
+  const [year, month, day] = task.dueDate.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '日期异常'
+  if (task.done || task.dueDate >= todayKey.value) return ''
+  return `逾期 · ${Number(month)}/${Number(day)}`
+}
+function isOverdueTask(task) { return !task.done && taskDueLabel(task).startsWith('逾期') }
 const tasks = computed(() => getLocalRecords('task')
   .filter((task) => !task.dueDate || task.dueDate <= todayKey.value)
   .sort((a, b) => Number(Boolean(a.done)) - Number(Boolean(b.done))
@@ -212,7 +222,7 @@ async function toggleFeaturedFavorite() {
         <article class="task-card surface-card">
           <div class="section-heading-row"><div><span class="section-kicker">轻轻推进</span><h2>今天的待办</h2></div><span class="task-count">{{ tasks.filter((task) => !task.done).length }} 项未完成</span></div>
           <ul class="task-list">
-            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-edit" :aria-label="'编辑待办：' + task.title" :disabled="taskSaving" @click="editTask(task)"><Icon name="edit" size="13" /></button><button class="task-delete" :aria-label="'删除待办：' + task.title" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
+            <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><span v-if="taskDueLabel(task)" class="task-date-badge" :class="{ 'is-overdue': isOverdueTask(task) }">{{ taskDueLabel(task) }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-edit" :aria-label="'编辑待办：' + task.title" :disabled="taskSaving" @click="editTask(task)"><Icon name="edit" size="13" /></button><button class="task-delete" :aria-label="'删除待办：' + task.title" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
           </ul>
           <form class="dashboard-task-form" @submit.prevent="addTask"><input v-model="taskTitle" maxlength="120" aria-label="新待办事项" placeholder="添加今天要做的事" :disabled="taskSaving" /><select v-model="taskPriority" aria-label="新待办优先级" :disabled="taskSaving"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button type="submit" aria-label="添加待办" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="16" /></button></form>
           <p v-if="taskError" class="workspace-error" role="alert">{{ taskError }}</p>
@@ -252,6 +262,8 @@ async function toggleFeaturedFavorite() {
 .task-count { color: #9aa4b1; font-size: 8px; }
 .task-list li { display: flex; align-items: center; gap: 9px; }
 .task-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-date-badge { flex: 0 0 auto; color: #969eaa; font-size: 8px; white-space: nowrap; }
+.task-date-badge.is-overdue { color: #b96e63; }
 .task-priority-select { min-height: 25px; flex: 0 0 48px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7c8795; background: transparent; font: inherit; font-size: 8px; cursor: pointer; }
 .task-priority-select:focus-visible { border-color: #dce5f1; outline: 2px solid rgba(89,139,218,.12); }
 .task-priority-select:disabled { opacity: .55; cursor: wait; }
