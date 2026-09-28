@@ -59,6 +59,7 @@ const tasks = computed(() => getLocalRecords('task')
     || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31'))
     || priorityRank(a) - priorityRank(b)
     || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))))
+const hiddenTaskCount = computed(() => Math.max(0, tasks.value.length - 5))
 const reviewCards = computed(() => getLocalRecords('review'))
 const dueReviewCards = computed(() => {
   const now = currentTime.value.getTime()
@@ -224,6 +225,7 @@ async function toggleFeaturedFavorite() {
           <ul class="task-list">
             <li v-for="task in tasks.slice(0, 5)" :key="task.id" :class="{ 'task-done': task.done }"><button class="task-checkbox" :aria-label="task.done ? '标记为未完成' : '标记为完成'" :disabled="taskSaving" @click="toggleTask(task)"><Icon v-if="task.done" name="check" size="13" /></button><span class="task-title">{{ task.title }}</span><span v-if="taskDueLabel(task)" class="task-date-badge" :class="{ 'is-overdue': isOverdueTask(task) }">{{ taskDueLabel(task) }}</span><select class="task-priority-select" :aria-label="`设置 ${task.title} 的优先级`" :value="normalizedPriority(task)" :disabled="taskSaving" @change="updateTaskPriority(task, $event.target.value)"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button class="task-edit" :aria-label="'编辑待办：' + task.title" :disabled="taskSaving" @click="editTask(task)"><Icon name="edit" size="13" /></button><button class="task-delete" :aria-label="'删除待办：' + task.title" :disabled="taskSaving" @click="removeTask(task)"><Icon name="trash" size="13" /></button></li>
           </ul>
+          <button v-if="hiddenTaskCount" type="button" class="task-more-link" @click="$emit('open-calendar')">还有 {{ hiddenTaskCount }} 项待办 · 前往日历管理 <Icon name="chevronRight" size="13" /></button>
           <form class="dashboard-task-form" @submit.prevent="addTask"><input v-model="taskTitle" maxlength="120" aria-label="新待办事项" placeholder="添加今天要做的事" :disabled="taskSaving" /><select v-model="taskPriority" aria-label="新待办优先级" :disabled="taskSaving"><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select><button type="submit" aria-label="添加待办" :disabled="taskSaving || !taskTitle.trim()"><Icon name="plus" size="16" /></button></form>
           <p v-if="taskError" class="workspace-error" role="alert">{{ taskError }}</p>
           <div v-if="!tasks.length" class="dashboard-empty-copy">写下一件今天想推进的小事。</div>
@@ -264,6 +266,8 @@ async function toggleFeaturedFavorite() {
 .task-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-date-badge { flex: 0 0 auto; color: #969eaa; font-size: 8px; white-space: nowrap; }
 .task-date-badge.is-overdue { color: #b96e63; }
+.task-more-link { display: inline-flex; align-items: center; gap: 2px; margin: 7px 0 0 25px; padding: 4px 0; border: 0; color: #7186a3; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
+.task-more-link:hover { color: #426da8; }
 .task-priority-select { min-height: 25px; flex: 0 0 48px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7c8795; background: transparent; font: inherit; font-size: 8px; cursor: pointer; }
 .task-priority-select:focus-visible { border-color: #dce5f1; outline: 2px solid rgba(89,139,218,.12); }
 .task-priority-select:disabled { opacity: .55; cursor: wait; }
