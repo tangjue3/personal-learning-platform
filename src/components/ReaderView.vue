@@ -706,7 +706,12 @@ function wrapTextOffsetWithMark(container, start, end, color) {
   }
 }
 
-watch([chapterHighlights, renderedDocument], () => { nextTick(paintChapterHighlights) })
+// 用签名而不是数组本身做监听：心跳落盘会让 records 事件数组变化，
+// 若直接 watch 数组，每分钟都会无谓地拆装一次高亮 DOM，打断用户选词。
+const chapterHighlightSignature = computed(() => chapterHighlights.value
+  .map((item) => `${item.id}:${item.color}`)
+  .join('|'))
+watch([chapterHighlightSignature, renderedDocument], () => { nextTick(paintChapterHighlights) })
 
 function findAnchorOffset(fullText, anchor) {  const exact = String(anchor.exact || '').trim()
   if (!exact) return null

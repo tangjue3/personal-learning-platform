@@ -84,7 +84,3 @@ export function stopReadingSession() {
   void flush()
   activeBookId = ''
 }
-
-export function formatDateKey(date = new Date()) {
-  return localDateKey(date)
-}

@@ -67,10 +67,20 @@ const dueReviewCards = computed(() => {
   return reviewCards.value.filter((card) => isReviewDue(card, now))
 })
 const dueReviewCount = computed(() => dueReviewCards.value.length)
+// 与统计页口径一致：readDays 之外，阅读时长心跳覆盖到的日子也算学习过。
+function studiedDayKeys() {
+  const days = new Set(getLocalRecords('reader').flatMap((record) => Array.isArray(record.readDays) ? record.readDays : []))
+  for (const record of getLocalRecords('preference')) {
+    if (/^reading-time-\d{4}-\d{2}-\d{2}$/.test(String(record.id || '')) && Number(record.totalSeconds) > 0) {
+      days.add(String(record.id).slice('reading-time-'.length))
+    }
+  }
+  return days
+}
 const week = computed(() => {
   const monday = new Date(currentTime.value)
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
-  const studiedDays = new Set(getLocalRecords('reader').flatMap((record) => Array.isArray(record.readDays) ? record.readDays : []))
+  const studiedDays = studiedDayKeys()
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(monday)
     date.setDate(date.getDate() + index)
@@ -79,7 +89,7 @@ const week = computed(() => {
   })
 })
 const studyStreak = computed(() => {
-  const days = new Set(getLocalRecords('reader').flatMap((record) => Array.isArray(record.readDays) ? record.readDays : []))
+  const days = studiedDayKeys()
   const cursor = new Date(currentTime.value)
   if (!days.has(todayKey.value)) cursor.setDate(cursor.getDate() - 1)
   let count = 0

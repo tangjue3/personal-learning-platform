@@ -728,7 +728,7 @@ async function saveSelectionCard({ front, back, resolve, reject }) {
 }
 
 /** EPUB 高亮：epubjs 的 annotations 层负责渲染与翻页后重绘，
- *  打开书时按存储的 CFI 一次性重建。 */
+ *  打开书时按存储的 CFI 一次性重建，删除划线时同步移除。 */
 function addEpubAnnotation(rendition, highlight) {
   const cfi = String(highlight.anchor?.cfi || '')
   if (!cfi) return
@@ -746,10 +746,20 @@ function hydrateEpubHighlights(rendition) {
   for (const highlight of bookHighlights.value) addEpubAnnotation(rendition, highlight)
 }
 
+watch(bookHighlights, (current, previous) => {
+  if (!epubRendition || !previous) return
+  const currentCfis = new Set(current.map((item) => String(item.anchor?.cfi || '')))
+  for (const item of previous) {
+    const cfi = String(item.anchor?.cfi || '')
+    if (!cfi || currentCfis.has(cfi)) continue
+    try { epubRendition.annotations.remove('highlight', cfi) } catch { /* 已不存在的标注直接跳过。 */ }
+  }
+})
+
 async function highlightFromSelection() {
   selectionAction.value.visible = false
   try {
-    const highlight = {
+    const draft = {
       bookId: String(props.book.id),
       chapterId: isPdf.value ? '' : String(selectedAnchor.value?.href || ''),
       chapterTitle: selectedChapterTitle.value,
@@ -757,9 +767,9 @@ async function highlightFromSelection() {
       anchor: selectedAnchor.value,
       format: isPdf.value ? 'pdf' : 'epub',
     }
-    await createHighlight(highlight)
+    const id = await createHighlight(draft)
     if (!isPdf.value && epubRendition) {
-      addEpubAnnotation(epubRendition, { ...highlight, id: '', color: 'yellow' })
+      addEpubAnnotation(epubRendition, { ...draft, id, color: 'yellow' })
     }
   } catch (error) {
     storageError.value = error.message || '划线没有保存成功，请稍后重试。'

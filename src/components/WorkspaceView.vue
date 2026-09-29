@@ -343,7 +343,7 @@ defineExpose({ startReview, focusNewCard: startNewCard, focusNoteById })
             <span class="review-session-count">{{ sessionPosition + 1 }} / {{ sessionIds.length }}</span>
             <h2>{{ activeCard.front }}</h2>
             <p v-if="activeCard.bookId" class="review-source">{{ bookName(activeCard.bookId) }}<template v-if="chapterName(activeCard.bookId, activeCard.chapterId)"> · {{ chapterName(activeCard.bookId, activeCard.chapterId) }}</template></p>
-            <div v-if="reviewStage === 'answer'" class="review-answer">{{ activeCard.back }}</div>
+            <div v-if="reviewStage === 'answer'" class="review-answer">{{ activeCard.back || '这张卡片没有写答案。回想一下它出自哪段内容、为什么当时想记住它。' }}</div>
             <button v-if="reviewStage === 'question'" class="button button-primary" @click="reviewStage = 'answer'">显示答案</button>
             <div v-else class="review-ratings"><button :disabled="reviewBusy" @click="rateCard('again')">重来 <small>10 分钟</small></button><button :disabled="reviewBusy" @click="rateCard('hard')">困难 <small>约 1 天</small></button><button :disabled="reviewBusy" @click="rateCard('good')">记得 <small>间隔复习</small></button><button :disabled="reviewBusy" @click="rateCard('easy')">简单 <small>延长间隔</small></button></div>
           </template>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 
 const props = defineProps({
@@ -13,6 +13,7 @@ const front = ref('')
 const back = ref('')
 const busy = ref(false)
 const saveError = ref('')
+const backField = ref(null)
 
 watch(() => props.open, (open) => {
   if (!open) return
@@ -20,6 +21,7 @@ watch(() => props.open, (open) => {
   back.value = ''
   busy.value = false
   saveError.value = ''
+  nextTick(() => backField.value?.focus())
 })
 
 async function save() {
@@ -46,7 +48,7 @@ async function save() {
         </header>
         <div class="card-dialog-quote"><span>原文</span><blockquote>{{ quote }}</blockquote></div>
         <label class="card-dialog-field"><span>卡片正面 · 回忆问题</span><textarea v-model="front" rows="3" maxlength="2000" :disabled="busy" placeholder="默认是原文，可改成一个自问的问题" /></label>
-        <label class="card-dialog-field"><span>卡片背面 · 我的理解 <em>可选</em></span><textarea v-model="back" rows="3" maxlength="4000" :disabled="busy" placeholder="写下答案、解释或为什么重要" /></label>
+        <label class="card-dialog-field"><span>卡片背面 · 我的理解 <em>可选</em></span><textarea ref="backField" v-model="back" rows="3" maxlength="4000" :disabled="busy" placeholder="写下答案、解释或为什么重要" /></label>
         <p class="card-dialog-hint">卡片会立刻进入复习队列，正面默认展示原文，靠回忆巩固。</p>
         <p v-if="saveError" class="card-dialog-error" role="alert">{{ saveError }}</p>
         <footer>
