@@ -185,7 +185,7 @@ function kindLabel(result) {
 .global-search-header input::placeholder { color:#a0a9b4; }
 .global-search-close { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:7px; border:0; border-radius:8px; color:#8994a1; background:transparent; cursor:pointer; }
 .global-search-close:hover { color:#536980; background:#f3f5f3; }
-.global-search-close kbd,.global-search-footer kbd { padding:3px 5px; border:1px solid #e5e8e5; border-radius:5px; color:#929ca6; background:#fafbf9; font:9px -apple-system,BlinkMacSystemFont,sans-serif; }
+.global-search-close kbd,.global-search-footer kbd { padding:3px 5px; border:1px solid #e5e8e5; border-radius:5px; color:#929ca6; background:#fafbf9; font:11px -apple-system,BlinkMacSystemFont,sans-serif; }
 .global-search-results { overflow:auto; padding:7px; }
 .global-search-result { width:100%; min-width:0; display:grid; grid-template-columns:34px minmax(0,1fr) 16px; align-items:center; gap:11px; padding:10px; border:0; border-radius:10px; color:#98a1ac; background:transparent; text-align:left; cursor:pointer; }
 .global-search-result:hover,.global-search-result.is-active { color:#5d82b0; background:#f1f5f7; }
@@ -193,20 +193,20 @@ function kindLabel(result) {
 .global-search-result.is-active .global-result-icon { border-color:#dce6ef; color:#5a7da4; background:#fff; }
 .global-result-copy { min-width:0; display:grid; gap:3px; }
 .global-result-title,.global-result-source,.global-result-excerpt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.global-result-title { color:#3f4d60; font-size:12px; font-weight:600; }
-.global-result-source { color:#8190a1; font-size:10px; }
-.global-result-excerpt { color:#929ca7; font-size:10px; }
+.global-result-title { color:#3f4d60; font-size:13.5px; font-weight:600; }
+.global-result-source { color:#8190a1; font-size:12px; }
+.global-result-excerpt { color:#929ca7; font-size:12px; }
 .global-search-empty { min-height:190px; display:grid; justify-items:center; align-content:center; padding:20px; color:#93a0ad; text-align:center; }
 .global-search-empty>span { width:36px; height:36px; display:grid; place-items:center; border-radius:11px; background:#f2f5f4; }
-.global-search-empty strong { margin-top:10px; color:#566477; font-size:12px; }
-.global-search-empty p { margin:5px 0 0; font-size:10px; }
+.global-search-empty strong { margin-top:10px; color:#566477; font-size:13.5px; }
+.global-search-empty p { margin:5px 0 0; font-size:12px; }
 .global-search-hint { min-height:128px; display:flex; align-items:center; gap:12px; padding:20px; }
 .global-search-hint-icon { width:36px; height:36px; flex:0 0 36px; display:grid; place-items:center; border-radius:11px; color:#6887aa; background:#eef3f6; }
 .global-search-hint>div { min-width:0; flex:1; }
-.global-search-hint strong { color:#4b596b; font-size:12px; }
-.global-search-hint p { margin:5px 0 0; color:#8995a3; font-size:10px; line-height:1.6; }
-.global-search-hint>kbd { color:#929ca6; font:9px -apple-system,BlinkMacSystemFont,sans-serif; white-space:nowrap; }
-.global-search-footer { min-height:35px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-top:1px solid #eef0ed; color:#9aa3ad; background:#fbfcfa; font-size:9px; }
+.global-search-hint strong { color:#4b596b; font-size:13.5px; }
+.global-search-hint p { margin:5px 0 0; color:#8995a3; font-size:12px; line-height:1.6; }
+.global-search-hint>kbd { color:#929ca6; font:11px -apple-system,BlinkMacSystemFont,sans-serif; white-space:nowrap; }
+.global-search-footer { min-height:35px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-top:1px solid #eef0ed; color:#9aa3ad; background:#fbfcfa; font-size:11px; }
 @media(max-width:640px) {
   .global-search-backdrop { padding:8vh 11px 12px; }
   .global-search-dialog { max-height:82svh; border-radius:16px; }
@@ -214,7 +214,7 @@ function kindLabel(result) {
   .global-search-header input { height:54px; font-size:13px; }
   .global-search-close { gap:3px; padding:5px; }
   .global-search-close kbd { display:none; }
-  .global-result-excerpt { font-size:9px; }
+  .global-result-excerpt { font-size:11px; }
   .global-search-hint { align-items:flex-start; flex-wrap:wrap; padding:16px; }
   .global-search-hint>kbd { margin-left:48px; }
 }

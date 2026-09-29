@@ -241,7 +241,7 @@ function openExistingBook() {
 .ebook-import-eyebrow {
   margin: 0 0 7px;
   color: #8a8f98;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: .04em;
 }
@@ -311,7 +311,7 @@ function openExistingBook() {
 }
 
 .ebook-import-dropzone strong { color: #383d45; font-size: 14px; font-weight: 600; }
-.ebook-import-dropzone small { color: #a0a5ad; font-size: 11px; }
+.ebook-import-dropzone small { color: #a0a5ad; font-size: 12.5px; }
 .ebook-import-link { color: #426bca; font-weight: 600; }
 
 .ebook-import-upload-icon {
@@ -348,7 +348,7 @@ function openExistingBook() {
   border-radius: 8px 8px 11px 8px;
   background: #eaf0ff;
   color: #486bc0;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: .02em;
 }
@@ -356,12 +356,12 @@ function openExistingBook() {
 .ebook-import-file-icon.format-pdf { background: #fff0ed; color: #bd6558; }
 .ebook-import-file-details { display: grid; min-width: 0; gap: 5px; flex: 1; text-align: left; }
 .ebook-import-file-details strong { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
-.ebook-import-file-details small { color: #969ba3; font-size: 11px; }
-.ebook-import-change { color: #4d70c3; font-size: 12px; font-weight: 600; }
+.ebook-import-file-details small { color: #969ba3; font-size: 12.5px; }
+.ebook-import-change { color: #4d70c3; font-size: 13.5px; font-weight: 600; }
 
 .ebook-import-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; }
-.ebook-import-fields label { display: grid; gap: 7px; color: #555b64; font-size: 12px; font-weight: 600; }
-.ebook-import-fields label em { margin-left: 4px; color: #a2a6ad; font-size: 10px; font-style: normal; font-weight: 400; }
+.ebook-import-fields label { display: grid; gap: 7px; color: #555b64; font-size: 13.5px; font-weight: 600; }
+.ebook-import-fields label em { margin-left: 4px; color: #a2a6ad; font-size: 12px; font-style: normal; font-weight: 400; }
 .ebook-import-fields input {
   width: 100%;
   height: 40px;
@@ -376,13 +376,13 @@ function openExistingBook() {
 .ebook-import-fields input::placeholder { color: #b0b4bb; }
 .ebook-import-fields input:disabled { background: #f8f9fa; color: #a0a4ac; }
 
-.ebook-import-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 0; color: #b64036; font-size: 12px; line-height: 1.55; }
-.ebook-import-error button { flex: 0 0 auto; padding: 5px 9px; border: 1px solid #e8c4bf; border-radius: 7px; color: #9d4339; background: #fff8f7; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
-.ebook-import-privacy { display: flex; align-items: center; gap: 7px; margin: 18px 0 0; color: #878c95; font-size: 11px; }
+.ebook-import-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 0; color: #b64036; font-size: 13.5px; line-height: 1.55; }
+.ebook-import-error button { flex: 0 0 auto; padding: 5px 9px; border: 1px solid #e8c4bf; border-radius: 7px; color: #9d4339; background: #fff8f7; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.ebook-import-privacy { display: flex; align-items: center; gap: 7px; margin: 18px 0 0; color: #878c95; font-size: 12.5px; }
 .ebook-import-privacy span { color: #7b9b87; }
 
 .ebook-import-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
-.ebook-import-actions button { min-width: 86px; height: 38px; padding: 0 16px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; transition: background-color 150ms ease, opacity 150ms ease; }
+.ebook-import-actions button { min-width: 86px; height: 38px; padding: 0 16px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 600; transition: background-color 150ms ease, opacity 150ms ease; }
 .ebook-import-cancel { background: #f2f3f5; color: #5f646d; }
 .ebook-import-cancel:hover:not(:disabled) { background: #e9ebee; }
 .ebook-import-submit { background: #242a35; color: #fff; }

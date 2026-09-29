@@ -243,19 +243,19 @@ function formatDate(value) {
 .reading-notes-scrim { position: fixed; z-index: 1001; inset: 0; display: flex; justify-content: flex-end; background: rgb(23 27 34 / 28%); backdrop-filter: blur(4px); animation: notes-scrim-in 140ms ease-out; }
 .reading-notes-panel { display: flex; width: min(100%, 440px); height: 100%; flex-direction: column; padding: 26px; overflow: auto; background: #fff; box-shadow: -18px 0 56px rgb(19 28 44 / 12%); color: #292d34; animation: notes-panel-in 180ms cubic-bezier(.2,.8,.2,1); }
 .reading-notes-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #f0f1f3; }
-.reading-notes-header p { margin: 0 0 6px; color: #8b9099; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.reading-notes-header p { margin: 0 0 6px; color: #8b9099; font-size: 12.5px; font-weight: 600; letter-spacing: .04em; }
 .reading-notes-header h2 { margin: 0; color: #282c33; font-size: 19px; font-weight: 650; letter-spacing: -.025em; }
 .reading-notes-close { display: grid; width: 32px; height: 32px; place-items: center; flex: 0 0 auto; border: 0; border-radius: 50%; background: #f4f5f6; color: #636871; cursor: pointer; font-size: 22px; line-height: 1; }
 .reading-notes-close:hover { background: #e9ebee; }
 .reading-notes-compose { padding: 20px 0 18px; border-bottom: 1px solid #f0f1f3; }
-.reading-notes-field { display: grid; gap: 8px; color: #626873; font-size: 11px; font-weight: 600; }
+.reading-notes-field { display: grid; gap: 8px; color: #626873; font-size: 12.5px; font-weight: 600; }
 .reading-notes-field em { color: #a5a9b1; font-style: normal; font-weight: 400; }
 .reading-notes-field textarea { width: 100%; resize: vertical; min-height: 88px; padding: 11px 12px; border: 1px solid #e6e8ec; border-radius: 12px; background: #fbfbfc; color: #343941; font: inherit; font-size: 13px; font-weight: 400; line-height: 1.65; }
 .reading-notes-field textarea:focus { border-color: #a8b9e2; background: #fff; outline: 3px solid rgb(82 117 190 / 11%); }
 .reading-notes-field textarea::placeholder { color: #a8adb5; }
 .reading-notes-quote { margin-bottom: 14px; padding: 12px 14px; border-left: 3px solid #d9c782; border-radius: 0 10px 10px 0; background: #fbf9f1; }
-.reading-notes-quote span { color: #999071; font-size: 10px; font-weight: 650; }
-.reading-notes-quote blockquote { margin: 5px 0 0; color: #555045; font-size: 12px; line-height: 1.65; }
+.reading-notes-quote span { color: #999071; font-size: 12px; font-weight: 650; }
+.reading-notes-quote blockquote { margin: 5px 0 0; color: #555045; font-size: 13.5px; line-height: 1.65; }
 .reading-notes-excerpt-field { margin-top: 12px; }
 .reading-notes-excerpt-field textarea { min-height: 60px; }
 .reading-notes-compose-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
@@ -265,32 +265,32 @@ function formatDate(value) {
 .reading-notes-colors button:disabled, .reading-notes-compose-actions button:disabled, .reading-notes-close:disabled, .reading-note-card footer button:disabled { cursor: wait; opacity: .55; }
 .note-color-yellow { background: #e9d98e; }.note-color-blue { background: #a9c6ea; }.note-color-green { background: #afd1b8; }.note-color-pink { background: #edbdc7; }
 .reading-notes-compose-actions { display: flex; gap: 8px; }
-.reading-notes-compose-actions button { height: 33px; padding: 0 11px; border: 0; border-radius: 9px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; }
+.reading-notes-compose-actions button { height: 33px; padding: 0 11px; border: 0; border-radius: 9px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; }
 .quiet-action { background: #f2f3f5; color: #676c74; }.save-action { background: #293241; color: #fff; }.save-action:disabled { cursor: not-allowed; opacity: .42; }
 .reading-notes-list-heading { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 10px; }
-.reading-notes-list-heading h3 { margin: 0; color: #515762; font-size: 12px; font-weight: 650; }
-.reading-notes-list-heading span { display: grid; min-width: 22px; height: 22px; place-items: center; border-radius: 11px; background: #f2f3f5; color: #7d838c; font-size: 10px; }
+.reading-notes-list-heading h3 { margin: 0; color: #515762; font-size: 13.5px; font-weight: 650; }
+.reading-notes-list-heading span { display: grid; min-width: 22px; height: 22px; place-items: center; border-radius: 11px; background: #f2f3f5; color: #7d838c; font-size: 12px; }
 .reading-notes-list { display: grid; gap: 9px; }
 .reading-note-card { overflow: hidden; border: 1px solid #ece9de; border-radius: 12px; background: #fffdf5; }
 .note-card-blue { border-color: #e0e8f2; background: #f8fbff; }.note-card-green { border-color: #dfebe1; background: #f8fcf8; }.note-card-pink { border-color: #f0e1e4; background: #fffafb; }
 .reading-note-main { display: grid; width: 100%; gap: 7px; padding: 12px 13px 8px; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
 .reading-note-main:hover .reading-note-content { color: #315cb3; }
-.reading-note-excerpt { display: -webkit-box; overflow: hidden; color: #77735f; font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.reading-note-content { display: -webkit-box; overflow: hidden; color: #41454c; font-size: 12px; line-height: 1.6; white-space: pre-wrap; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.reading-note-excerpt { display: -webkit-box; overflow: hidden; color: #77735f; font-size: 12.5px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.reading-note-content { display: -webkit-box; overflow: hidden; color: #41454c; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .reading-note-content :deep(code) { padding: .08em .3em; border-radius: 4px; color: #536176; background: #edf0f4; font: .94em Consolas, monospace; }
 .reading-note-content :deep(.note-markdown-link) { color: #5684c7; text-decoration: underline; text-underline-offset: 2px; }
-.reading-note-location { color: #9a9da3; font-size: 10px; }
+.reading-note-location { color: #9a9da3; font-size: 12px; }
 .reading-note-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px 10px; }
-.reading-note-card footer time { color: #a2a5ab; font-size: 9px; }
+.reading-note-card footer time { color: #a2a5ab; font-size: 11px; }
 .reading-note-card footer div { display: flex; gap: 5px; }
-.reading-note-card footer button { padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #797f88; cursor: pointer; font: inherit; font-size: 10px; }
+.reading-note-card footer button { padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #797f88; cursor: pointer; font: inherit; font-size: 12px; }
 .reading-note-card footer button:hover { background: rgb(0 0 0 / 5%); color: #30353d; }.reading-note-card footer .delete-note-action { color: #bd7068; }
 .reading-notes-empty { display: grid; min-height: 136px; align-content: center; justify-items: center; gap: 5px; color: #969ba4; text-align: center; }
 .reading-notes-empty span { margin-bottom: 3px; color: #bcc1c9; font-size: 22px; }
-.reading-notes-empty strong { color: #656b75; font-size: 12px; font-weight: 600; }
-.reading-notes-empty p { margin: 0; font-size: 10px; }
-.reading-notes-error { margin: 10px 0 0; color: #ae473e; font-size: 11px; line-height: 1.5; }
-.reading-notes-local-hint { margin: auto 0 0; padding-top: 18px; color: #a0a4aa; font-size: 10px; text-align: center; }
+.reading-notes-empty strong { color: #656b75; font-size: 13.5px; font-weight: 600; }
+.reading-notes-empty p { margin: 0; font-size: 12px; }
+.reading-notes-error { margin: 10px 0 0; color: #ae473e; font-size: 12.5px; line-height: 1.5; }
+.reading-notes-local-hint { margin: auto 0 0; padding-top: 18px; color: #a0a4aa; font-size: 12px; text-align: center; }
 .reading-notes-panel button:focus-visible { outline: 3px solid rgb(70 111 208 / 32%); outline-offset: 2px; }
 @keyframes notes-scrim-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes notes-panel-in { from { opacity: .6; transform: translateX(9px); } to { opacity: 1; transform: translateX(0); } }

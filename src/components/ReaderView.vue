@@ -861,44 +861,44 @@ onBeforeUnmount(() => {
 .reader-selection-action { position: fixed; z-index: 80; transform: translateX(-50%); padding: 4px; border: 1px solid #e7ebf1; border-radius: 11px; background: #fff; box-shadow: 0 8px 24px rgba(37,52,72,.16); }
 .reader-selection-action.is-below::after { top: -5px; bottom: auto; transform: rotate(225deg); }
 .reader-selection-action::after { position: absolute; bottom: -5px; left: calc(50% - 5px); width: 9px; height: 9px; border-right: 1px solid #e7ebf1; border-bottom: 1px solid #e7ebf1; background: #fff; content: ''; transform: rotate(45deg); }
-.reader-selection-action button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; color: #526b90; background: #fff; font: inherit; font-size: 10px; white-space: nowrap; cursor: pointer; }
+.reader-selection-action button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; color: #526b90; background: #fff; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .reader-selection-action button:hover { color: #3969a5; background: #f4f8fd; }
 .reader-note-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(30,42,58,.3); backdrop-filter: blur(3px); }
 .reader-note-dialog { width: min(100%, 520px); max-height: min(88vh, 760px); overflow: auto; padding: 22px; border: 1px solid rgba(255,255,255,.75); border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(31,43,61,.22); }
 .reader-note-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 19px; }
 .reader-note-dialog header h2 { margin: 7px 0 0; color: #344154; font-size: 18px; font-weight: 620; letter-spacing: -.03em; }
-.reader-note-dialog .section-kicker { display: block; max-width: 410px; overflow: hidden; color: #8291a5; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.reader-note-field { display: grid; gap: 7px; margin-top: 14px; color: #58667a; font-size: 10px; }
+.reader-note-dialog .section-kicker { display: block; max-width: 410px; overflow: hidden; color: #8291a5; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.reader-note-field { display: grid; gap: 7px; margin-top: 14px; color: #58667a; font-size: 12px; }
 .reader-note-field > span { display: flex; justify-content: space-between; }
-.reader-note-field small { color: #a1a9b4; font-size: 9px; font-weight: 400; }
-.reader-note-field input, .reader-note-field textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #e6eaf0; border-radius: 9px; outline: 0; color: #465368; background: #fbfcfd; font: inherit; font-size: 11px; }
+.reader-note-field small { color: #a1a9b4; font-size: 11px; font-weight: 400; }
+.reader-note-field input, .reader-note-field textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #e6eaf0; border-radius: 9px; outline: 0; color: #465368; background: #fbfcfd; font: inherit; font-size: 12.5px; }
 .reader-note-field textarea { min-height: 90px; resize: vertical; line-height: 1.7; }
 .reader-note-field input:focus, .reader-note-field textarea:focus { border-color: #a8c3eb; box-shadow: 0 0 0 3px rgba(87,137,211,.12); }
-.reader-note-quote { display: grid; gap: 7px; margin-top: 14px; color: #58667a; font-size: 10px; }
-.reader-note-quote blockquote { max-height: 190px; overflow: auto; margin: 0; padding: 11px 13px; border-left: 3px solid #b6cbea; border-radius: 0 8px 8px 0; color: #64738a; background: #f5f8fc; font-size: 11px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
-.reader-note-privacy { margin: 12px 0 0; color: #929dac; font-size: 9px; line-height: 1.6; }
-.reader-note-error { margin: 11px 0 0; color: #b65e59; font-size: 10px; }
+.reader-note-quote { display: grid; gap: 7px; margin-top: 14px; color: #58667a; font-size: 12px; }
+.reader-note-quote blockquote { max-height: 190px; overflow: auto; margin: 0; padding: 11px 13px; border-left: 3px solid #b6cbea; border-radius: 0 8px 8px 0; color: #64738a; background: #f5f8fc; font-size: 12.5px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.reader-note-privacy { margin: 12px 0 0; color: #929dac; font-size: 11px; line-height: 1.6; }
+.reader-note-error { margin: 11px 0 0; color: #b65e59; font-size: 12px; }
 .reader-note-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; padding-top: 13px; border-top: 1px solid #edf0f3; }
-.reader-note-dialog footer .button { min-height: 35px; font-size: 10px; }
-.reader-storage-hint { margin: 0 0 15px; padding: 9px 12px; border: 1px solid #e8edf3; border-radius: 9px; color: #788597; background: rgba(246,248,251,.92); font-size: 10px; line-height: 1.6; }
+.reader-note-dialog footer .button { min-height: 35px; font-size: 12px; }
+.reader-storage-hint { margin: 0 0 15px; padding: 9px 12px; border: 1px solid #e8edf3; border-radius: 9px; color: #788597; background: rgba(246,248,251,.92); font-size: 12px; line-height: 1.6; }
 .toc-section { display: grid; gap: 2px; }
-.toc-folder { padding: 8px 8px 4px; overflow: hidden; color: #9ca6b4; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.toc-folder { padding: 8px 8px 4px; overflow: hidden; color: #9ca6b4; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .reader-layout--toc-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
 .reader-layout--toc-collapsed .reader-toc { display: none; }
 .reader-toc-backdrop { display: none; }
 .toc-bookmark-mark { flex: 0 0 auto; margin-left: auto; color: #6592d2; fill: #a8c3eb; }
 .reader-bookmark-control { position: relative; }
-.reader-bookmark-count { position: absolute; top: -3px; right: -3px; min-width: 14px; height: 14px; display: grid; place-items: center; padding: 0 2px; border-radius: 8px; color: #fff; background: #6e98d4; font-size: 8px; line-height: 1; }
+.reader-bookmark-count { position: absolute; top: -3px; right: -3px; min-width: 14px; height: 14px; display: grid; place-items: center; padding: 0 2px; border-radius: 8px; color: #fff; background: #6e98d4; font-size: 10px; line-height: 1; }
 .reader-bookmark-panel { position: absolute; z-index: 20; top: calc(100% + 9px); right: 0; width: min(290px, calc(100vw - 30px)); max-height: min(360px, 60vh); overflow: auto; padding: 11px; border: 1px solid #e8ecf0; border-radius: 13px; background: #fff; box-shadow: 0 14px 38px rgba(35,49,68,.16); }
-.reader-bookmark-heading { display: flex; justify-content: space-between; padding: 3px 4px 9px; border-bottom: 1px solid #edf0f3; color: #48566b; font-size: 11px; }
-.reader-bookmark-heading span { color: #a0a9b5; font-size: 10px; }
+.reader-bookmark-heading { display: flex; justify-content: space-between; padding: 3px 4px 9px; border-bottom: 1px solid #edf0f3; color: #48566b; font-size: 12.5px; }
+.reader-bookmark-heading span { color: #a0a9b5; font-size: 12px; }
 .reader-bookmark-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 5px; border: 0; border-bottom: 1px solid #f0f2f5; color: #8994a3; background: transparent; text-align: left; cursor: pointer; }
 .reader-bookmark-item:hover { color: #5684c7; background: #f8faff; }
 .reader-bookmark-item > span { min-width: 0; display: grid; gap: 4px; }
-.reader-bookmark-item small { color: #9ba5b2; font-size: 8px; }
-.reader-bookmark-item strong { overflow: hidden; color: #536075; font-size: 10px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
-.reader-bookmark-empty { margin: 0; padding: 14px 5px 6px; color: #9aa4b1; font-size: 9px; line-height: 1.6; }
-.chapter-completion-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 9px; border: 1px solid #e7ebf0; border-radius: 9px; color: #8a95a4; background: #fff; font: inherit; font-size: 9px; cursor: pointer; }
+.reader-bookmark-item small { color: #9ba5b2; font-size: 10px; }
+.reader-bookmark-item strong { overflow: hidden; color: #536075; font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.reader-bookmark-empty { margin: 0; padding: 14px 5px 6px; color: #9aa4b1; font-size: 11px; line-height: 1.6; }
+.chapter-completion-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 9px; border: 1px solid #e7ebf0; border-radius: 9px; color: #8a95a4; background: #fff; font: inherit; font-size: 11px; cursor: pointer; }
 .chapter-completion-button.is-complete { border-color: #dceadf; color: #5f8a6b; background: #f5faf6; }
 .reader-markdown { color: #66717f; font-size: var(--reader-font-size); line-height: 1.9; letter-spacing: .01em; overflow-wrap: anywhere; }
 .reader-markdown :deep(img) { max-width: 100%; height: auto; display: block; margin: 18px auto; border-radius: 8px; }

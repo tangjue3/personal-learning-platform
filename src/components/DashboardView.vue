@@ -252,23 +252,23 @@ async function toggleFeaturedFavorite() {
 .no-book-card { min-height: 232px; display: flex; align-items: center; gap: 16px; padding: 22px; }
 .no-book-card .overview-icon { flex: 0 0 38px; }
 .no-book-card h2 { margin: 7px 0; color: #39475b; font-size: 16px; }
-.no-book-card p { max-width: 350px; margin: 0 0 13px; color: #8792a1; font-size: 10px; line-height: 1.7; }
-.favorite-feedback { margin: 8px 0 0; color: #9a7b72; font-size: 9px; }
-.dashboard-private-hint, .dashboard-empty-copy { padding: 14px 3px; color: #9aa4b1; font-size: 10px; line-height: 1.65; }
+.no-book-card p { max-width: 350px; margin: 0 0 13px; color: #8792a1; font-size: 12px; line-height: 1.7; }
+.favorite-feedback { margin: 8px 0 0; color: #9a7b72; font-size: 11px; }
+.dashboard-private-hint, .dashboard-empty-copy { padding: 14px 3px; color: #9aa4b1; font-size: 12px; line-height: 1.65; }
 .dashboard-private-setup { grid-column: 1 / -1; min-height: 132px; display: flex; align-items: center; gap: 16px; padding: 22px; }
 .dashboard-private-setup > div { min-width: 0; flex: 1; }
 .dashboard-private-setup h2 { margin: 6px 0; color: #39475b; font-size: 15px; font-weight: 620; }
-.dashboard-private-setup p { max-width: 510px; margin: 0; color: #8792a1; font-size: 10px; line-height: 1.7; }
-.dashboard-private-setup .button { min-height: 35px; flex: 0 0 auto; font-size: 10px; }
+.dashboard-private-setup p { max-width: 510px; margin: 0; color: #8792a1; font-size: 12px; line-height: 1.7; }
+.dashboard-private-setup .button { min-height: 35px; flex: 0 0 auto; font-size: 12px; }
 .dashboard-empty-copy .text-button { margin-left: 5px; }
-.task-count { color: #9aa4b1; font-size: 8px; }
+.task-count { color: #9aa4b1; font-size: 10px; }
 .task-list li { display: flex; align-items: center; gap: 9px; }
 .task-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-date-badge { flex: 0 0 auto; color: #969eaa; font-size: 8px; white-space: nowrap; }
+.task-date-badge { flex: 0 0 auto; color: #969eaa; font-size: 10px; white-space: nowrap; }
 .task-date-badge.is-overdue { color: #b96e63; }
-.task-more-link { display: inline-flex; align-items: center; gap: 2px; margin: 7px 0 0 25px; padding: 4px 0; border: 0; color: #7186a3; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
+.task-more-link { display: inline-flex; align-items: center; gap: 2px; margin: 7px 0 0 25px; padding: 4px 0; border: 0; color: #7186a3; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
 .task-more-link:hover { color: #426da8; }
-.task-priority-select { min-height: 25px; flex: 0 0 48px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7c8795; background: transparent; font: inherit; font-size: 8px; cursor: pointer; }
+.task-priority-select { min-height: 25px; flex: 0 0 48px; padding: 0 2px; border: 1px solid transparent; border-radius: 6px; color: #7c8795; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
 .task-priority-select:focus-visible { border-color: #dce5f1; outline: 2px solid rgba(89,139,218,.12); }
 .task-priority-select:disabled { opacity: .55; cursor: wait; }
 .task-checkbox { flex: 0 0 16px; cursor: pointer; }
@@ -277,8 +277,8 @@ async function toggleFeaturedFavorite() {
 .task-edit { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; border: 0; border-radius: 6px; color: #9aa5b2; background: transparent; cursor: pointer; }
 .task-edit:hover { color: #5e82b5; background: #f1f5fa; }
 .dashboard-task-form { display: flex; gap: 6px; margin-top: 14px; }
-.dashboard-task-form input { min-width: 0; flex: 1; height: 31px; box-sizing: border-box; padding: 0 9px; border: 1px solid #e8ebef; border-radius: 8px; outline: 0; color: #596779; background: #fff; font: inherit; font-size: 9px; }
-.dashboard-task-form select { width: 57px; height: 31px; padding: 0 5px; border: 1px solid #e8ebef; border-radius: 8px; color: #687485; background: #fff; font: inherit; font-size: 8px; }
+.dashboard-task-form input { min-width: 0; flex: 1; height: 31px; box-sizing: border-box; padding: 0 9px; border: 1px solid #e8ebef; border-radius: 8px; outline: 0; color: #596779; background: #fff; font: inherit; font-size: 11px; }
+.dashboard-task-form select { width: 57px; height: 31px; padding: 0 5px; border: 1px solid #e8ebef; border-radius: 8px; color: #687485; background: #fff; font: inherit; font-size: 10px; }
 .dashboard-task-form select:disabled { opacity: .55; }
 .dashboard-task-form button:disabled { opacity: .55; cursor: wait; }
 .task-checkbox:disabled, .task-delete:disabled, .task-edit:disabled { opacity: .55; cursor: wait; }
@@ -290,12 +290,12 @@ async function toggleFeaturedFavorite() {
 .dashboard-review-prompt--ready .dashboard-review-icon { color: #4f7fba; background: #e4eef9; }
 .dashboard-review-prompt--empty .dashboard-review-icon { color: #789b88; background: #edf4ef; }
 .dashboard-review-copy { min-width: 0; flex: 1; display: grid; gap: 4px; }
-.dashboard-review-copy strong { overflow: hidden; color: #506075; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-review-copy span { overflow: hidden; color: #8793a2; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-review-action { min-height: 30px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-radius: 8px; color: #fff; background: #618bc3; font: inherit; font-size: 9px; font-weight: 600; cursor: pointer; transition: background .18s ease, transform .18s ease; }
+.dashboard-review-copy strong { overflow: hidden; color: #506075; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-review-copy span { overflow: hidden; color: #8793a2; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-review-action { min-height: 30px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-radius: 8px; color: #fff; background: #618bc3; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .18s ease, transform .18s ease; }
 .dashboard-review-action:hover { background: #4e7cb7; transform: translateY(-1px); }
 .dashboard-review-action--quiet { color: #63866f; background: #eaf2ec; }
 .dashboard-review-action--quiet:hover { background: #dfece2; }
-.dashboard-review-complete { flex: 0 0 auto; padding: 5px 7px; border-radius: 7px; color: #6f9880; background: #edf5ef; font-size: 9px; }
-@media (max-width: 640px) { .dashboard-review-prompt { gap: 8px; margin-top: 14px; padding: 9px; } .dashboard-review-copy strong { font-size: 9px; } .dashboard-review-copy span { font-size: 8px; } .dashboard-review-action { min-height: 28px; padding: 0 7px; font-size: 8px; } }
+.dashboard-review-complete { flex: 0 0 auto; padding: 5px 7px; border-radius: 7px; color: #6f9880; background: #edf5ef; font-size: 11px; }
+@media (max-width: 640px) { .dashboard-review-prompt { gap: 8px; margin-top: 14px; padding: 9px; } .dashboard-review-copy strong { font-size: 11px; } .dashboard-review-copy span { font-size: 10px; } .dashboard-review-action { min-height: 28px; padding: 0 7px; font-size: 10px; } }
 </style>

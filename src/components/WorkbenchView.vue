@@ -286,26 +286,26 @@ defineExpose({ focusPageById })
 .workbench-page-panel { position:sticky; top:14px; display:grid; gap:10px; padding:12px 10px; border:1px solid #e7e9e5; border-radius:16px; background:rgba(255,255,255,.82); }
 .workbench-panel-heading,.workbench-panel-heading>div { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .workbench-panel-heading { padding:0 4px; }
-.workbench-panel-heading>div strong { min-width:20px; height:20px; display:grid; place-items:center; border-radius:6px; color:#738096; background:#f0f3f0; font-size:9px; }
+.workbench-panel-heading>div strong { min-width:20px; height:20px; display:grid; place-items:center; border-radius:6px; color:#738096; background:#f0f3f0; font-size:11px; }
 .workbench-panel-heading .icon-button { width:28px; height:28px; }
 .workbench-page-search { height:34px; display:flex; align-items:center; gap:7px; padding:0 9px; border:1px solid #e8ebe7; border-radius:8px; color:#9ba4b0; background:white; }
-.workbench-page-search input { width:100%; min-width:0; border:0; outline:0; color:#4c596b; background:transparent; font:inherit; font-size:10px; }
+.workbench-page-search input { width:100%; min-width:0; border:0; outline:0; color:#4c596b; background:transparent; font:inherit; font-size:12px; }
 .workbench-page-list { display:grid; gap:3px; max-height:min(55vh,570px); overflow:auto; }
 .workbench-page-item { width:auto; min-width:0; display:flex; align-items:flex-start; gap:9px; padding:9px 8px; border:0; border-radius:9px; color:#627083; background:transparent; text-align:left; cursor:pointer; }
 .workbench-page-item:hover { background:#f4f6f3; }
-.workbench-page-tree-marker { width:12px; flex:0 0 12px; color:#a0a9b3; font-size:11px; text-align:center; }
+.workbench-page-tree-marker { width:12px; flex:0 0 12px; color:#a0a9b3; font-size:12.5px; text-align:center; }
 .workbench-page-tree-marker.is-child { color:#9eabb8; }
 .workbench-child:hover { color:#4f7cac; background:#edf3f8; }
 .workbench-page-item.is-active { color:#3f6eaa; background:#edf3fa; }
 .workbench-page-icon { flex:0 0 auto; font-size:15px; }
 .workbench-page-copy { min-width:0; display:grid; gap:4px; }
 .workbench-page-copy strong,.workbench-page-copy small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.workbench-page-copy strong { color:#445268; font-size:11px; font-weight:600; }
-.workbench-page-copy small { color:#909aa7; font-size:10px; }
-.workbench-page-empty { padding:13px 7px; color:#919ba7; font-size:10px; text-align:center; }
-.workbench-local-note { display:flex; align-items:center; gap:7px; padding:10px 7px 0; border-top:1px solid #eceeea; color:#86918f; font-size:9px; }
+.workbench-page-copy strong { color:#445268; font-size:12.5px; font-weight:600; }
+.workbench-page-copy small { color:#909aa7; font-size:12px; }
+.workbench-page-empty { padding:13px 7px; color:#919ba7; font-size:12px; text-align:center; }
+.workbench-local-note { display:flex; align-items:center; gap:7px; padding:10px 7px 0; border-top:1px solid #eceeea; color:#86918f; font-size:11px; }
 .workbench-editor-card { min-width:0; overflow:hidden; }
-.workbench-breadcrumb { min-height:44px; display:flex; align-items:center; gap:7px; padding:0 17px; border-bottom:1px solid #eef0ec; color:#8a95a1; font-size:10px; }
+.workbench-breadcrumb { min-height:44px; display:flex; align-items:center; gap:7px; padding:0 17px; border-bottom:1px solid #eef0ec; color:#8a95a1; font-size:12px; }
 .workbench-breadcrumb-current { min-width:0; overflow:hidden; color:#586679; text-overflow:ellipsis; white-space:nowrap; }
 .workbench-save-status { margin-left:auto; display:flex; flex:0 0 auto; align-items:center; gap:5px; color:#84938d; }
 .workbench-save-status i { width:6px; height:6px; border-radius:50%; background:#82ac95; }
@@ -317,52 +317,52 @@ defineExpose({ focusPageById })
 .workbench-title-row input { width:100%; min-width:0; height:45px; border:0; outline:0; color:#283343; background:transparent; font:inherit; font-size:clamp(22px,2vw,30px); font-weight:650; letter-spacing:-.045em; }
 .workbench-delete { opacity:.6; }
 .workbench-delete:hover { opacity:1; color:#bd7167; }
-.workbench-page-meta { margin:7px 0 19px 43px; color:#909aa5; font-size:9px; }
+.workbench-page-meta { margin:7px 0 19px 43px; color:#909aa5; font-size:11px; }
 .workbench-page-meta span { margin:0 4px; color:#c1c7ce; }
 .workbench-block-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:0 0 9px 43px; }
-.workbench-block-toolbar>span { margin-right:4px; color:#9aa3ad; font-size:9px; }
-.workbench-block-toolbar button { min-height:27px; display:inline-flex; align-items:center; gap:5px; padding:0 7px; border:1px solid transparent; border-radius:7px; color:#798596; background:transparent; font:inherit; font-size:9px; cursor:pointer; }
+.workbench-block-toolbar>span { margin-right:4px; color:#9aa3ad; font-size:11px; }
+.workbench-block-toolbar button { min-height:27px; display:inline-flex; align-items:center; gap:5px; padding:0 7px; border:1px solid transparent; border-radius:7px; color:#798596; background:transparent; font:inherit; font-size:11px; cursor:pointer; }
 .workbench-block-toolbar button:hover { border-color:#e9ece8; color:#527ba9; background:#f8faf8; }
-.workbench-block-toolbar button strong { color:#7288a2; font-size:11px; }
+.workbench-block-toolbar button strong { color:#7288a2; font-size:12.5px; }
 .workbench-document :deep(.markdown-note-editor) { border-color:#ebede9; background:white; }
 .workbench-document :deep(.markdown-note-toolbar) { min-height:40px; background:#fbfcfa; }
 .workbench-document :deep(.markdown-note-editor textarea) { min-height:380px; padding:21px 22px; font-size:13px; line-height:1.85; }
 .workbench-document :deep(.markdown-note-preview) { min-height:380px; padding:22px clamp(18px,4vw,48px); font-size:13px; line-height:1.9; }
-.workbench-editor-footer { display:flex; align-items:center; justify-content:space-between; gap:9px; margin:12px 0 0 43px; color:#929ca7; font-size:9px; }
-.workbench-editor-footer .button { min-height:32px; padding:0 11px; font-size:9px; }
-.workbench-error { margin:9px 0 0 43px; color:#b8665e; font-size:10px; }
+.workbench-editor-footer { display:flex; align-items:center; justify-content:space-between; gap:9px; margin:12px 0 0 43px; color:#929ca7; font-size:11px; }
+.workbench-editor-footer .button { min-height:32px; padding:0 11px; font-size:11px; }
+.workbench-error { margin:9px 0 0 43px; color:#b8665e; font-size:12px; }
 .workbench-error button { border:0; color:#517caf; background:transparent; cursor:pointer; }
 .workbench-editor-empty { min-height:460px; display:grid; justify-items:center; align-content:center; padding:28px; text-align:center; }
 .workbench-editor-empty .workbench-error { margin:12px 0; }
 .workbench-empty-icon { width:48px; height:48px; display:grid; place-items:center; border-radius:15px; color:#6283ad; background:#eef3f8; }
 .workbench-editor-empty h2 { margin:15px 0 6px; color:#354155; font-size:17px; }
-.workbench-editor-empty p { max-width:360px; margin:0 0 16px; color:#8994a2; font-size:11px; line-height:1.7; }
+.workbench-editor-empty p { max-width:360px; margin:0 0 16px; color:#8994a2; font-size:12.5px; line-height:1.7; }
 .workbench-right-rail { display:grid; gap:12px; }
 .workbench-widget { min-width:0; padding:15px; border-radius:16px; }
 .workbench-widget header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .workbench-widget header h2 { margin:5px 0 0; color:#39465a; font-size:13px; font-weight:620; }
-.workbench-widget header .text-button { flex:0 0 auto; font-size:9px; }
+.workbench-widget header .text-button { flex:0 0 auto; font-size:11px; }
 .workbench-task-form { display:flex; gap:5px; margin-top:12px; }
-.workbench-task-form input { width:100%; min-width:0; height:34px; padding:0 9px; border:1px solid #e7eae6; border-radius:8px; color:#4e5a6b; background:#fbfcfa; font:inherit; font-size:10px; }
+.workbench-task-form input { width:100%; min-width:0; height:34px; padding:0 9px; border:1px solid #e7eae6; border-radius:8px; color:#4e5a6b; background:#fbfcfa; font:inherit; font-size:12px; }
 .workbench-task-form button { width:34px; flex:0 0 34px; display:grid; place-items:center; border:0; border-radius:8px; color:white; background:#648aba; cursor:pointer; }
 .workbench-task-list,.workbench-agenda-list { display:grid; gap:2px; margin:8px 0 0; padding:0; list-style:none; }
 .workbench-task-list li,.workbench-agenda-list li { display:flex; align-items:flex-start; gap:8px; padding:8px 1px; border-bottom:1px solid #f0f1ee; }
 .workbench-task-check { width:17px; height:17px; flex:0 0 17px; display:grid; place-items:center; border:1px solid #d6ddd8; border-radius:5px; color:#789681; background:white; cursor:pointer; }
 .workbench-task-list li>span { min-width:0; display:grid; gap:4px; }
-.workbench-task-list li strong,.workbench-agenda-copy strong { overflow:hidden; color:#596779; font-size:11px; font-weight:550; text-overflow:ellipsis; white-space:nowrap; }
-.workbench-task-list li small,.workbench-agenda-copy small { color:#929ca8; font-size:9px; }
+.workbench-task-list li strong,.workbench-agenda-copy strong { overflow:hidden; color:#596779; font-size:12.5px; font-weight:550; text-overflow:ellipsis; white-space:nowrap; }
+.workbench-task-list li small,.workbench-agenda-copy small { color:#929ca8; font-size:11px; }
 .workbench-task-list li small b { color:#bf8974; font-weight:500; }
-.workbench-widget-empty { margin:12px 0 1px; color:#929ca8; font-size:10px; line-height:1.6; }
+.workbench-widget-empty { margin:12px 0 1px; color:#929ca8; font-size:12px; line-height:1.6; }
 .workbench-agenda-list li { align-items:center; gap:9px; }
-.workbench-agenda-date { min-width:46px; display:grid; gap:3px; color:#71829a; font-size:9px; }
-.workbench-agenda-date small { color:#9ba4af; font-size:8px; }
+.workbench-agenda-date { min-width:46px; display:grid; gap:3px; color:#71829a; font-size:11px; }
+.workbench-agenda-date small { color:#9ba4af; font-size:10px; }
 .workbench-agenda-copy { min-width:0; display:grid; gap:4px; }
 .workbench-book-link { width:100%; min-width:0; display:flex; align-items:center; gap:8px; margin-top:9px; padding:6px 0; border:0; color:#768397; background:transparent; text-align:left; cursor:pointer; }
 .workbench-book-icon { width:28px; height:34px; flex:0 0 28px; display:grid; place-items:center; border-radius:5px; color:#7f9bbd; background:#f1f4f7; }
 .workbench-book-link>span:nth-child(2) { min-width:0; flex:1; display:grid; gap:4px; }
 .workbench-book-link>span:nth-child(2) strong,.workbench-book-link>span:nth-child(2) small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.workbench-book-link>span:nth-child(2) strong { color:#566376; font-size:10px; }
-.workbench-book-link>span:nth-child(2) small { color:#969faa; font-size:9px; }
+.workbench-book-link>span:nth-child(2) strong { color:#566376; font-size:12px; }
+.workbench-book-link>span:nth-child(2) small { color:#969faa; font-size:11px; }
 @media(max-width:1250px) {
   .workbench-layout { grid-template-columns:190px minmax(0,1fr); }
   .workbench-right-rail { grid-column:2; grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -375,7 +375,7 @@ defineExpose({ focusPageById })
 }
 @media(max-width:640px) {
   .workbench-heading { align-items:flex-end; }
-  .workbench-heading .button { min-height:36px; padding:0 9px; font-size:9px; }
+  .workbench-heading .button { min-height:36px; padding:0 9px; font-size:11px; }
   .workbench-layout { grid-template-columns:minmax(0,1fr); gap:10px; }
   .workbench-page-panel { position:static; gap:8px; padding:10px; }
   .workbench-page-list { display:flex; max-height:none; overflow-x:auto; }
@@ -383,11 +383,11 @@ defineExpose({ focusPageById })
   .workbench-right-rail { grid-column:auto; grid-template-columns:minmax(0,1fr); }
   .workbench-reading-widget { grid-column:auto; }
   .workbench-document { padding:16px 11px; }
-  .workbench-breadcrumb { padding:0 11px; font-size:8px; }
+  .workbench-breadcrumb { padding:0 11px; font-size:10px; }
   .workbench-title-row input { height:39px; font-size:21px; }
   .workbench-page-meta,.workbench-block-toolbar,.workbench-editor-footer,.workbench-error { margin-left:35px; }
-  .workbench-document :deep(.markdown-note-editor textarea) { min-height:285px; padding:15px; font-size:12px; }
-  .workbench-document :deep(.markdown-note-preview) { min-height:285px; padding:16px; font-size:12px; }
+  .workbench-document :deep(.markdown-note-editor textarea) { min-height:285px; padding:15px; font-size:13.5px; }
+  .workbench-document :deep(.markdown-note-preview) { min-height:285px; padding:16px; font-size:13.5px; }
   .workbench-editor-footer { align-items:flex-start; flex-direction:column; }
 }
 </style>

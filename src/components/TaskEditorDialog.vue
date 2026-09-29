@@ -104,14 +104,14 @@ async function save() {
 .task-editor-dialog header, .task-editor-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .task-editor-dialog header h2 { margin: 5px 0 0; color: #303a49; font-size: 20px; font-weight: 640; }
 .task-editor-dialog header .icon-button { display: grid; place-items: center; }
-.task-editor-field { min-width: 0; display: grid; gap: 7px; color: #657184; font-size: 12px; font-weight: 600; }
+.task-editor-field { min-width: 0; display: grid; gap: 7px; color: #657184; font-size: 13.5px; font-weight: 600; }
 .task-editor-field input, .task-editor-field select { width: 100%; min-height: 40px; padding: 0 11px; border: 1px solid #e4e8ed; border-radius: 10px; outline: 0; background: #fbfcfd; color: #384455; font: inherit; font-size: 13px; }
 .task-editor-field input:focus, .task-editor-field select:focus { border-color: #abc0df; box-shadow: 0 0 0 3px rgb(88 129 190 / 11%); }
-.task-editor-field small { color: #99a1ac; font-size: 10px; font-weight: 400; }
+.task-editor-field small { color: #99a1ac; font-size: 12px; font-weight: 400; }
 .task-editor-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(100px, .8fr); gap: 12px; align-items: start; }
 .task-editor-dialog footer > div { display: flex; gap: 8px; }
-.task-editor-completed { display: inline-flex; align-items: center; gap: 5px; color: #6c9278; font-size: 11px; }
-.task-editor-error { margin: 0; color: #ad5a54; font-size: 12px; }
+.task-editor-completed { display: inline-flex; align-items: center; gap: 5px; color: #6c9278; font-size: 12.5px; }
+.task-editor-error { margin: 0; color: #ad5a54; font-size: 13.5px; }
 .task-editor-dialog button:disabled, .task-editor-field :disabled { cursor: wait; opacity: .58; }
 @media (max-width: 430px) { .task-editor-dialog { padding: 19px; border-radius: 17px; } }
 </style>

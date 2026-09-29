@@ -41,12 +41,12 @@ const previewHtml = computed(() => renderNoteMarkdown(props.modelValue))
 .markdown-note-editor { overflow: hidden; border: 1px solid #e6e8ec; border-radius: 12px; background: #fbfbfc; }
 .markdown-note-toolbar { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px; border-bottom: 1px solid #eceef1; }
 .markdown-note-toolbar > div { display: inline-flex; gap: 3px; padding: 2px; border-radius: 8px; background: #f0f2f5; }
-.markdown-note-toolbar button { min-height: 25px; padding: 0 9px; border: 0; border-radius: 6px; color: #848c98; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
+.markdown-note-toolbar button { min-height: 25px; padding: 0 9px; border: 0; border-radius: 6px; color: #848c98; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
 .markdown-note-toolbar button.selected { color: #4c5f79; background: #fff; box-shadow: 0 1px 3px rgb(35 48 64 / 9%); }
-.markdown-note-toolbar > span { color: #a0a6af; font-size: 9px; }
+.markdown-note-toolbar > span { color: #a0a6af; font-size: 11px; }
 .markdown-note-editor textarea { display: block; width: 100%; min-height: 112px; padding: 11px 12px; resize: vertical; border: 0; outline: 0; background: transparent; color: #343941; font: inherit; font-size: 13px; font-weight: 400; line-height: 1.65; }
 .markdown-note-editor textarea::placeholder { color: #a8adb5; }
-.markdown-note-preview { min-height: 112px; max-height: 360px; padding: 12px 13px; overflow: auto; color: #4e5968; font-size: 12px; font-weight: 400; line-height: 1.75; overflow-wrap: anywhere; }
+.markdown-note-preview { min-height: 112px; max-height: 360px; padding: 12px 13px; overflow: auto; color: #4e5968; font-size: 13.5px; font-weight: 400; line-height: 1.75; overflow-wrap: anywhere; }
 .markdown-note-preview :deep(p) { margin: 0 0 10px; }
 .markdown-note-preview :deep(p:last-child) { margin-bottom: 0; }
 .markdown-note-preview :deep(h1), .markdown-note-preview :deep(h2), .markdown-note-preview :deep(h3), .markdown-note-preview :deep(h4) { margin: 15px 0 7px; color: #39475b; line-height: 1.4; }
@@ -54,7 +54,7 @@ const previewHtml = computed(() => renderNoteMarkdown(props.modelValue))
 .markdown-note-preview :deep(ul), .markdown-note-preview :deep(ol) { margin: 6px 0 11px; padding-left: 1.5em; }
 .markdown-note-preview :deep(blockquote) { margin: 9px 0; padding: 6px 11px; border-left: 3px solid #b9c9dc; color: #69788d; background: #f1f5fa; }
 .markdown-note-preview :deep(blockquote p) { margin: 0; }
-.markdown-note-preview :deep(pre) { margin: 9px 0; padding: 10px 11px; overflow: auto; border-radius: 8px; color: #536176; background: #eef1f5; font: 11px/1.65 Consolas, monospace; }
+.markdown-note-preview :deep(pre) { margin: 9px 0; padding: 10px 11px; overflow: auto; border-radius: 8px; color: #536176; background: #eef1f5; font: 12.5px/1.65 Consolas, monospace; }
 .markdown-note-preview :deep(code) { padding: .08em .3em; border-radius: 4px; color: #536176; background: #edf0f4; font: .92em Consolas, monospace; }
 .markdown-note-preview :deep(pre code) { padding: 0; background: transparent; }
 .markdown-note-preview :deep(a) { color: #4b83c8; text-decoration: underline; text-underline-offset: 2px; }
