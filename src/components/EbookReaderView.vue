@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import ePub from 'epubjs'
 import Icon from './Icon.vue'
 import ReadingNotesPanel from './ReadingNotesPanel.vue'
-import { loadEbookBlob } from '../services/ebookFileStore.js'
+import { getEbookFileUrl, loadEbookArrayBuffer } from '../services/ebookFileStore.js'
 import { ensureEbookAvailable } from '../services/ebookMigration.js'
 import { getLegacyReadingProgress } from '../services/legacyEbookStore.js'
 import { getLocalRecord, saveLocalRecord } from '../services/localDataStore.js'
@@ -87,11 +87,13 @@ const currentBookmark = computed(() => bookmarks.value.some((item) => isPdf.valu
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
   void loadBook()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
   resizeObserver?.disconnect()
   if (saveTimer) window.clearTimeout(saveTimer)
   if (isReady && isDirty) void flushProgress()
@@ -110,7 +112,6 @@ async function loadBook() {
   try {
     // 优先读取本机目录中的原文件；只有本机副本缺失时才尝试迁移浏览器旧副本。
     await ensureEbookAvailable(String(props.book.id))
-    const blob = await loadEbookBlob(String(props.book.id))
 
     let saved = getLocalRecord('reader', String(props.book.id))
     if (!saved) {
@@ -130,8 +131,8 @@ async function loadBook() {
     busy.value = false
     await nextTick()
 
-    if (isPdf.value) await openPdf(blob)
-    else await openEpub(blob)
+    if (isPdf.value) await openPdf()
+    else await openEpub()
     if (props.initialAnchor) await restoreInitialAnchor(props.initialAnchor)
     storageError.value = ''
   } catch (error) {
@@ -185,8 +186,8 @@ function disposeReader() {
   pdfDocument = null
 }
 
-async function openEpub(blob) {
-  epubBook = ePub(await blob.arrayBuffer())
+async function openEpub() {
+  epubBook = ePub(await loadEbookArrayBuffer(String(props.book.id)))
   await epubBook.ready
   const navigation = await epubBook.loaded.navigation
   tocItems.value = flattenEpubToc(navigation?.toc || [])
@@ -285,7 +286,7 @@ function handleEpubSelection(cfiRange, contents) {
   } else selectionAction.value.visible = true
 }
 
-async function openPdf(blob) {
+async function openPdf() {
   const [pdfModule, workerModule] = await Promise.all([
     import('pdfjs-dist'),
     import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
@@ -293,12 +294,21 @@ async function openPdf(blob) {
   ])
   pdfjsLib = pdfModule
   pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default
+  // 通过 URL + Range 分块按需加载：只为正在渲染的页面取数据，浏览器内存
+  // 大致与文件大小解耦，几百 MB 的 PDF 也能快速打开。
   pdfLoadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(await blob.arrayBuffer()),
+    url: getEbookFileUrl(String(props.book.id)),
+    rangeChunkSize: 512 * 1024,
+    disableAutoFetch: true,
     isEvalSupported: false,
     enableXfa: false,
   })
-  pdfDocument = await pdfLoadingTask.promise
+  try {
+    pdfDocument = await pdfLoadingTask.promise
+  } catch (error) {
+    if (error?.name === 'PasswordException') throw new Error('这份 PDF 设置了打开密码，暂时无法阅读。')
+    throw new Error('无法读取这份 PDF 的本机文件，请确认文件完好后重试。')
+  }
   pdfPageCount.value = pdfDocument.numPages
   pdfPage.value = Math.min(pdfPageCount.value || 1, Math.max(1, readerState.value.page))
   pdfPageInput.value = String(pdfPage.value)
@@ -382,6 +392,16 @@ async function renderPdfPage() {
 function handleResize() {
   if (isPdf.value) void renderPdfPage()
   else epubRendition?.resize()
+}
+
+function handleKeydown(event) {
+  if (event.defaultPrevented || busy.value || errorMessage.value || notePanelOpen.value) return
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  const target = event.target
+  if (target instanceof Element && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return
+  event.preventDefault()
+  if (isPdf.value) void goToPdfPage(event.key === 'ArrowLeft' ? pdfPage.value - 1 : pdfPage.value + 1)
+  else if (epubRendition) void (event.key === 'ArrowLeft' ? epubRendition.prev() : epubRendition.next())
 }
 
 function updatePdfProgress() {

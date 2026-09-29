@@ -188,12 +188,16 @@ export async function getEbookFile(bookId) {
   return payload.book
 }
 
-/** Load the original EPUB/PDF file as a Blob for EPUB.js / PDF.js. */
-export async function loadEbookBlob(bookId) {
+/** 本机电子书原文件的接口地址；服务端支持 HTTP Range，可供 PDF.js 分块加载。 */
+export function getEbookFileUrl(bookId) {
   if (!bookId) throw new Error('缺少书籍标识，无法读取电子书文件。')
+  return `${EBOOK_API}/${encodeURIComponent(String(bookId))}/file`
+}
+
+async function fetchEbookFile(bookId) {
   let response
   try {
-    response = await fetch(`${EBOOK_API}/${encodeURIComponent(String(bookId))}/file`, {
+    response = await fetch(getEbookFileUrl(bookId), {
       headers: { 'X-Zhixu-Client': 'local-ui' },
       credentials: 'same-origin',
     })
@@ -204,7 +208,20 @@ export async function loadEbookBlob(bookId) {
     const payload = await response.json().catch(() => ({}))
     throw new Error(payload.error || '找不到这本电子书的本机文件，请重新导入。')
   }
-  return response.blob()
+  return response
+}
+
+/** 把 EPUB 原文件整份读成 ArrayBuffer。JSZip 需要完整缓冲区，但直接从网络
+ *  流读成一份 ArrayBuffer，避免先落 Blob 再复制一份的双倍内存。 */
+export async function loadEbookArrayBuffer(bookId) {
+  if (!bookId) throw new Error('缺少书籍标识，无法读取电子书文件。')
+  return (await fetchEbookFile(bookId)).arrayBuffer()
+}
+
+/** Load the original EPUB/PDF file as a Blob for EPUB.js / PDF.js. */
+export async function loadEbookBlob(bookId) {
+  if (!bookId) throw new Error('缺少书籍标识，无法读取电子书文件。')
+  return (await fetchEbookFile(bookId)).blob()
 }
 
 /** Create a temporary blob URL for the original file (used by export). */

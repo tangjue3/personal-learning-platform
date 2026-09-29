@@ -78,7 +78,7 @@ function assertLocalBrowser(request, { requireClientHeader = false } = {}) {
       ? new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`])
       : developmentOrigins
     if (!allowed.has(origin)) throw fail(403, '请求来源不受信任。')
-  } else if (request.method !== 'GET') {
+  } else if (request.method !== 'GET' && request.method !== 'HEAD') {
     throw fail(403, '缺少本机页面来源信息。')
   }
 
@@ -1084,7 +1084,30 @@ async function deleteEbookBook(bookId) {
   await rm(directory, { recursive: true, force: false })
 }
 
-async function serveEbookFile(bookId, response) {
+// 解析单段 Range 请求头。返回 null 表示忽略该头并按整份响应；语法有效但
+// 起点越界时返回 { unsatisfiable: true }，按 416 处理。
+function parseByteRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || '').trim())
+  if (!match || (!match[1] && !match[2])) return null
+  let start
+  let end
+  if (!match[1]) {
+    const suffixLength = Number(match[2])
+    if (!suffixLength) return null
+    start = Math.max(0, size - suffixLength)
+    end = size - 1
+  } else {
+    start = Number(match[1])
+    end = match[2] ? Number(match[2]) : size - 1
+    // 显式区间 end < start 属于语法无效，忽略整个头；开放区间的起点越界
+    // 才是“不可满足”，要在默认 end 之后判定。
+    if (match[2] && end < start) return null
+  }
+  if (start >= size) return { unsatisfiable: true }
+  return { start, end: Math.min(end, size - 1) }
+}
+
+async function serveEbookFile(bookId, request, response) {
   const directory = await resolveEbookDirectory(bookId)
   const metadata = await readEbookMetadata(directory)
   const filePath = join(directory, `source.${metadata.format}`)
@@ -1093,20 +1116,39 @@ async function serveEbookFile(bookId, response) {
   catch { throw fail(404, '没有找到这本电子书的原文件，请重新导入。') }
   if (!fileStat.isFile()) throw fail(404, '没有找到这本电子书的原文件，请重新导入。')
 
+  // PDF.js 依靠 Range 分块按需取数据，大文件打开时浏览器不必整份读入内存。
   const downloadName = sanitizeEbookFileName(metadata.fileName, metadata.format)
-  response.writeHead(200, {
+  const headers = {
     'Content-Type': metadata.mediaType || ebookMediaTypes.get(metadata.format),
-    'Content-Length': fileStat.size,
+    'Accept-Ranges': 'bytes',
     'Content-Disposition': `attachment; filename="ebook.${metadata.format}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
-  })
+  }
+  const range = parseByteRange(request.headers.range, fileStat.size)
+  if (range?.unsatisfiable) {
+    response.writeHead(416, { ...headers, 'Content-Range': `bytes */${fileStat.size}` })
+    response.end()
+    return
+  }
+  if (range) {
+    headers['Content-Length'] = String(range.end - range.start + 1)
+    headers['Content-Range'] = `bytes ${range.start}-${range.end}/${fileStat.size}`
+    response.writeHead(206, headers)
+  } else {
+    headers['Content-Length'] = String(fileStat.size)
+    response.writeHead(200, headers)
+  }
+  if (request.method === 'HEAD') {
+    response.end()
+    return
+  }
   await new Promise((resolvePromise, rejectPromise) => {
-    const stream = createReadStream(filePath)
+    const stream = createReadStream(filePath, range ? { start: range.start, end: range.end } : undefined)
     stream.on('error', rejectPromise)
     response.on('error', rejectPromise)
-    response.on('close', resolvePromise)
+    response.on('close', () => { stream.destroy(); resolvePromise() })
     stream.pipe(response)
   })
 }
@@ -1354,9 +1396,9 @@ async function handleApi(request, response, url) {
   }
 
   const ebookFileRoute = pathname.match(/^\/api\/ebooks\/([a-zA-Z0-9._-]{1,120})\/file$/)
-  if (ebookFileRoute && request.method === 'GET') {
+  if (ebookFileRoute && (request.method === 'GET' || request.method === 'HEAD')) {
     assertLocalBrowser(request)
-    await serveEbookFile(ebookFileRoute[1], response)
+    await serveEbookFile(ebookFileRoute[1], request, response)
     return true
   }
 
