@@ -160,7 +160,7 @@ function focusSearch() {
   nextTick(() => searchInput.value?.focus())
 }
 
-function openManagement(book) {
+function openManagement(book, showDeleteConfirm = false) {
   managedBook.value = book
   managementDraft.value = {
     title: book.title || '', subtitle: book.subtitle || '', author: book.author || '',
@@ -169,7 +169,7 @@ function openManagement(book) {
   }
   managementError.value = ''
   managementNotice.value = ''
-  confirmBookDelete.value = false
+  confirmBookDelete.value = showDeleteConfirm
 }
 
 function closeManagement() {
@@ -535,7 +535,7 @@ async function importCourse() {
           </div>
         </button>
         <div class="book-card-details">
-          <div class="book-card-title-row"><button class="book-card-title-button" @click="emit('open-book', book)"><h2>{{ book.title }}</h2><p>{{ book.subtitle }}</p></button><button class="card-more-button" :aria-label="`管理《${book.title}》`" @click.stop="openManagement(book)"><Icon name="more" size="18" /></button></div>
+          <div class="book-card-title-row"><button class="book-card-title-button" @click="emit('open-book', book)"><h2>{{ book.title }}</h2><p>{{ book.subtitle }}</p></button><button class="card-more-button card-delete-button" :aria-label="`删除《${book.title}》`" title="删除这本书" @click.stop="openManagement(book, true)"><Icon name="trash" size="16" /></button><button class="card-more-button" :aria-label="`管理《${book.title}》`" @click.stop="openManagement(book)"><Icon name="more" size="18" /></button></div>
           <div class="book-card-meta"><span v-if="book.format">{{ book.format.toUpperCase() }} 电子书</span><span v-else>{{ book.chapters }} 个章节</span><span class="meta-dot">·</span><span>{{ book.progress }}% 已读</span><span v-if="book.repositoryManaged" class="imported-label">课程仓库</span><span v-else-if="book.localOnly" class="imported-label">仅本机</span><span v-else-if="book.imported" class="imported-label">已导入</span><span v-if="book.migrationPending" class="imported-label imported-label--warning">{{ book.serviceOffline ? '待迁移 · 服务离线' : '待迁移' }}</span></div>
           <div class="progress-track book-progress"><span :style="{ width: `${book.progress}%` }"></span></div>
         </div>
@@ -696,6 +696,10 @@ async function importCourse() {
 .skeleton-shimmer { background: linear-gradient(100deg, #eceff2 40%, #f6f8fa 50%, #eceff2 60%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
 @keyframes skeleton-shimmer { from { background-position: 120% 0; } to { background-position: -80% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-shimmer { animation: none; } }
+/* 悬停书卡时才出现的快捷删除；触屏和键盘用户仍可经“⋯ → 管理”删除 */
+.card-delete-button { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+.book-card:hover .card-delete-button, .card-delete-button:focus-visible { opacity: 1; pointer-events: auto; }
+.card-delete-button:hover { color: #a84f49; background: #fdf1ef; }
 @media (max-width: 520px) {
   .importer-backdrop { align-items: end; padding: 10px; }
   .importer-dialog { max-height: 88vh; padding: 19px 17px; border-radius: 18px; }
