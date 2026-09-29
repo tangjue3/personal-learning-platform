@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import TaskEditorDialog from './TaskEditorDialog.vue'
 import { getLocalRecord, getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
@@ -20,6 +20,7 @@ const taskPriority = ref('normal')
 const taskError = ref('')
 const taskSaving = ref(false)
 const editingTask = ref(null)
+const weekPanel = ref(null)
 let draftBaseline = ''
 let calendarPreferenceRestored = false
 let calendarPreferenceTimer = null
@@ -40,6 +41,50 @@ function toDateKey(date) {
 }
 
 const todayKey = computed(() => toDateKey(calendarNow.value))
+
+/** “现在”指示线：只在本周可见、且落在 08:00–22:00 网格内时显示，画在今天那一列。 */
+const showNowLine = computed(() => weekDays.value.some((day) => day.isToday))
+const nowPosition = computed(() => {
+  const now = calendarNow.value
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  if (minutes < 8 * 60 || minutes > 22 * 60) return null
+  const column = weekDays.value.findIndex((day) => day.isToday)
+  if (column < 0) return null
+  return {
+    top: Math.round(minutes - 8 * 60),
+    left: `${(column / 7) * 100}%`,
+    width: `${100 / 7}%`,
+  }
+})
+
+function scrollToCurrentTime(behavior = 'auto') {
+  const panel = weekPanel.value
+  if (!panel || mode.value !== '周' || !showNowLine.value || nowPosition.value === null) return
+  const target = Math.max(0, Math.min(panel.scrollHeight - panel.clientHeight, nowPosition.value.top - 90))
+  panel.scrollTo({ top: target, behavior })
+}
+
+function slotEndTime(start) {
+  const [hour, minute] = start.split(':').map(Number)
+  const total = Math.min(22 * 60, hour * 60 + minute + 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** 点击周视图空白格：按点击位置换算出日期和半小时槽位，直接带时间打开表单。 */
+function handleGridClick(event) {
+  const grid = event.currentTarget
+  const rect = grid.getBoundingClientRect()
+  if (!rect.width || !rect.height) return
+  const slot = Math.floor((event.clientY - rect.top) / 30)
+  const column = Math.floor((event.clientX - rect.left) / (rect.width / 7))
+  if (slot < 0 || slot > 27 || column < 0 || column > 6) return
+  const day = weekDays.value[column]
+  if (!day) return
+  const minutes = slot * 30
+  const start = `${String(8 + Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  openNewEvent(day.date, { start, end: slotEndTime(start) })
+}
+
 onMounted(() => { clockTimer = window.setInterval(() => { calendarNow.value = new Date() }, 30_000) })
 onBeforeUnmount(() => {
   if (clockTimer) window.clearInterval(clockTimer)
@@ -54,6 +99,8 @@ watch(() => localDataState.serviceAvailable, (available) => {
   if (available) restoreCalendarPreference()
 }, { immediate: true })
 watch([mode, () => toDateKey(focusDate.value)], queueCalendarPreferenceSave)
+watch(mode, (value) => { if (value === '周') nextTick(() => scrollToCurrentTime()) })
+onMounted(() => { nextTick(() => scrollToCurrentTime()) })
 
 function fromDateKey(key) {
   const [year, month, day] = key.split('-').map(Number)
@@ -302,6 +349,7 @@ function movePeriod(amount) {
 
 function goToToday() {
   focusDate.value = new Date(calendarNow.value)
+  if (mode.value === '周') nextTick(() => scrollToCurrentTime('smooth'))
 }
 
 function showDayInWeek(date) {
@@ -309,8 +357,12 @@ function showDayInWeek(date) {
   mode.value = '周'
 }
 
-function openNewEvent(date = focusDate.value) {
+function openNewEvent(date = focusDate.value, time = null) {
   draft.value = createEmptyDraft(date)
+  if (time) {
+    draft.value.start = time.start
+    draft.value.end = time.end
+  }
   draftBaseline = JSON.stringify(draft.value)
   formError.value = ''
   modalOpen.value = true
@@ -487,7 +539,7 @@ function eventGridRowEnd(event) {
       </div>
     </section>
 
-    <section v-if="mode === '周'" class="calendar-panel calendar-week-panel surface-card">
+    <section v-if="mode === '周'" ref="weekPanel" class="calendar-panel calendar-week-panel surface-card">
       <div class="calendar-grid">
         <div class="calendar-corner"></div>
         <div v-for="day in weekDays" :key="day.key" class="calendar-day-heading" :class="{ 'calendar-day-heading--today': day.isToday, 'calendar-day-heading--selected': day.key === toDateKey(focusDate) }">
@@ -498,7 +550,7 @@ function eventGridRowEnd(event) {
           <i v-if="day.isToday"></i>
         </div>
         <div class="calendar-time-column"><span v-for="hour in hours" :key="hour">{{ hour }}</span></div>
-        <div class="calendar-days-grid">
+        <div class="calendar-days-grid" @click="handleGridClick">
           <div v-for="day in weekDays" :key="`lines-${day.key}`" class="calendar-day-column"><span v-for="hour in hours" :key="hour" class="calendar-hour-line"></span></div>
           <button
             v-for="event in weekEvents"
@@ -507,8 +559,9 @@ function eventGridRowEnd(event) {
             :class="`calendar-event--${categoryTone(event.category)}`"
             :style="{ gridColumn: weekDays.findIndex((day) => day.key === event.date) + 1, gridRow: `${eventGridRowStart(event)} / ${eventGridRowEnd(event)}` }"
             :title="`${event.title} · ${eventNote(event)}`"
-            @click="openEditEvent(event)"
+            @click.stop="openEditEvent(event)"
           ><strong>{{ event.title }}</strong><span>{{ eventNote(event) }}</span></button>
+          <i v-if="showNowLine && nowPosition" class="calendar-now-line" :style="{ top: `${nowPosition.top}px`, left: nowPosition.left, width: nowPosition.width }" aria-hidden="true"></i>
         </div>
       </div>
     </section>
@@ -700,4 +753,23 @@ function eventGridRowEnd(event) {
 .calendar-task-form button:disabled { opacity: .5; cursor: not-allowed; }
 .calendar-task-error { margin: 10px 0; color: #b65f58; font-size: 12px; }
 @media (max-width: 640px) { .calendar-task-panel { padding: 15px; } .calendar-task-heading h2 { font-size: 13px; } .calendar-task-title { font-size: 12px; } .calendar-task-form button { padding: 0 9px; font-size: 11px; } }
+
+/* 周视图改为面板内滚动：表头吸附在顶部，打开时自动滚到当前时段。 */
+.calendar-week-panel { max-height: min(76vh, 920px); overflow: auto; overscroll-behavior: contain; }
+.calendar-week-panel .calendar-corner, .calendar-week-panel .calendar-day-heading { position: sticky; top: 0; z-index: 5; background: #fff; }
+.calendar-day-column { cursor: pointer; }
+.calendar-day-column:hover { background: rgba(76, 135, 234, .03); }
+.calendar-day-column .calendar-hour-line { transition: background .12s ease; }
+.calendar-day-column .calendar-hour-line:hover { background: rgba(76, 135, 234, .09); }
+.calendar-now-line { position: absolute; z-index: 6; left: 0; right: 0; height: 2px; background: #ee6a5c; pointer-events: none; }
+.calendar-now-line::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ee6a5c; }
+
+/* 宽屏双栏：日历在左，当天待办吸在右侧，不必来回滚动。 */
+@media (min-width: 1180px) {
+  .calendar-page { display: grid; grid-template-columns: minmax(0, 1fr) 352px; gap: 14px; align-items: start; }
+  .calendar-page .calendar-heading, .calendar-page .calendar-toolbar, .calendar-page .calendar-footnote { grid-column: 1 / -1; }
+  .calendar-page .calendar-panel, .calendar-page .calendar-task-panel { margin-top: 0; }
+  .calendar-page .calendar-panel { grid-column: 1; }
+  .calendar-page .calendar-task-panel { grid-column: 2; position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow: auto; }
+}
 </style>
