@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import MarkdownNoteInput from './MarkdownNoteInput.vue'
-import { deleteLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
 import { renderNoteInline } from '../services/noteMarkdown.js'
 import { isReviewDue } from '../services/reviewSchedule.js'
 
@@ -180,10 +180,55 @@ async function rateCard(rating) {
   if (!activeCard.value) return
   reviewBusy.value = true; reviewError.value = ''
   const { id, updatedAt, ...data } = scheduleAfterRating(activeCard.value, rating)
-  try { await saveLocalRecord('review', id, data); sessionPosition.value += 1; reviewStage.value = 'question' }
+  try { await saveLocalRecord('review', id, data); await bumpReviewDailyStats(rating); sessionPosition.value += 1; reviewStage.value = 'question' }
   catch (error) { reviewError.value = error.message }
   finally { reviewBusy.value = false }
 }
+
+function currentDateKey() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/** 每天的复习结果汇总进一条 preference 记录（review-stats-日期），
+ *  复习打分失败时静默跳过，绝不影响复习流程本身。 */
+async function bumpReviewDailyStats(rating) {
+  const day = currentDateKey()
+  const key = `review-stats-${day}`
+  const existing = getLocalRecord('preference', key) || { date: day, counts: { again: 0, hard: 0, good: 0, easy: 0 } }
+  const counts = { again: 0, hard: 0, good: 0, easy: 0, ...existing.counts, [rating]: (Number(existing.counts?.[rating]) || 0) + 1 }
+  try {
+    await saveLocalRecord('preference', key, {
+      ...existing, counts, total: counts.again + counts.hard + counts.good + counts.easy,
+    })
+  } catch { /* 统计只是记录，失败可忽略。 */ }
+}
+
+const reviewDailyStats = computed(() => {
+  reviewClock.value
+  const today = currentDateKey()
+  const weekStart = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+  const weekStartKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
+  let todayTotal = 0
+  let todayRemembered = 0
+  let weekTotal = 0
+  for (const record of getLocalRecords('preference')) {
+    const entityId = String(record.id || '')
+    if (!/^review-stats-\d{4}-\d{2}-\d{2}$/.test(entityId)) continue
+    const total = Number(record.total) || 0
+    if (!total) continue
+    if (entityId === `review-stats-${today}`) {
+      todayTotal = total
+      todayRemembered = (Number(record.counts?.good) || 0) + (Number(record.counts?.easy) || 0)
+    }
+    if (entityId.slice('review-stats-'.length) >= weekStartKey) weekTotal += total
+  }
+  return {
+    todayTotal,
+    weekTotal,
+    accuracy: todayTotal ? Math.round((todayRemembered / todayTotal) * 100) : null,
+  }
+})
 function replaceCardDraft(next = emptyCard()) {
   cardDraft.value = next
   cardDraftBaseline = JSON.stringify(next)
@@ -305,7 +350,7 @@ defineExpose({ startReview, focusNewCard: startNewCard, focusNoteById })
           <template v-else-if="sessionDone"><h2>这一轮复习完成</h2><p>记录已保存。再次进入复习时会按计划出现。</p><button class="button button-secondary" @click="startReview">检查新到期卡片</button></template>
           <template v-else><h2>{{ dueCards.length ? '准备好开始了吗？' : '今天没有到期卡片' }}</h2><p>{{ dueCards.length ? '有 ' + dueCards.length + ' 张卡片等你回忆。' : cards.length ? '共有 ' + cards.length + ' 张卡片，下一次复习时间：' + formatDate(cards.reduce((earliest, card) => !earliest || card.dueAt < earliest ? card.dueAt : earliest, '')) + '。' : '从课程笔记创建卡片，或手动制作一张。' }}</p><button v-if="dueCards.length" class="button button-primary" @click="startReview"><Icon name="play" size="15" /> 开始复习</button></template>
         </article>
-        <article class="review-count-card surface-card"><span class="section-kicker">知识卡片</span><div class="review-count-number">{{ dueCards.length }}<span> 张待复习</span></div><div class="review-summary"><span>总卡片数</span><strong>{{ cards.length }}</strong></div><div class="review-summary"><span>已安排后续复习</span><strong>{{ cards.filter((card) => !isReviewDue(card, reviewClock.value)).length }} 张</strong></div></article>
+        <article class="review-count-card surface-card"><span class="section-kicker">知识卡片</span><div class="review-count-number">{{ dueCards.length }}<span> 张待复习</span></div><div class="review-summary"><span>今日已复习</span><strong>{{ reviewDailyStats.todayTotal }} 张</strong></div><div class="review-summary"><span>今日记得率</span><strong>{{ reviewDailyStats.accuracy === null ? '—' : reviewDailyStats.accuracy + '%' }}</strong></div><div class="review-summary"><span>近 7 天复习</span><strong>{{ reviewDailyStats.weekTotal }} 次</strong></div><div class="review-summary"><span>总卡片数</span><strong>{{ cards.length }}</strong></div><div class="review-summary"><span>已安排后续复习</span><strong>{{ cards.filter((card) => !isReviewDue(card, reviewClock.value)).length }} 张</strong></div></article>
       </section>
       <p v-if="reviewError" class="workspace-error" role="alert">{{ reviewError }}</p>
       <section class="card-editor surface-card">

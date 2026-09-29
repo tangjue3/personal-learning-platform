@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ePub from 'epubjs'
 import Icon from './Icon.vue'
 import ReadingNotesPanel from './ReadingNotesPanel.vue'
 import { getEbookFileUrl, loadEbookArrayBuffer } from '../services/ebookFileStore.js'
 import { ensureEbookAvailable } from '../services/ebookMigration.js'
+import { getEpubLocations, saveEpubLocations } from '../services/epubLocationCache.js'
 import { getLegacyReadingProgress } from '../services/legacyEbookStore.js'
 import { getLocalRecord, saveLocalRecord } from '../services/localDataStore.js'
 
@@ -42,6 +43,12 @@ const selectedExcerpt = ref('')
 const selectedAnchor = ref(null)
 const selectedChapterTitle = ref('')
 const selectionAction = ref({ visible: false, top: 0, left: 0 })
+const pdfSearchOpen = ref(false)
+const pdfSearchInput = ref(null)
+const pdfSearchQuery = ref('')
+const pdfSearchStatus = ref('')
+const pdfSearchMessage = ref('')
+const pdfSearchResults = ref([])
 const readerState = ref({
   cfi: '', href: '', page: 1, progress: 0, chapterTitle: '',
   bookmarks: [], theme: 'light', fontSize: 18, readDays: [], lastReadAt: '',
@@ -62,6 +69,8 @@ let isReady = false
 let isDirty = false
 let progressRevision = 0
 let lastSavedPayload = ''
+let pdfSearchTexts = null
+let pdfSearchTimer = null
 const currentEpubCfi = ref('')
 const currentEpubHref = ref('')
 
@@ -108,6 +117,7 @@ async function loadBook() {
   isDirty = false
   tocItems.value = []
   bookmarks.value = []
+  closePdfSearch()
   disposeReader()
   try {
     // 优先读取本机目录中的原文件；只有本机副本缺失时才尝试迁移浏览器旧副本。
@@ -208,29 +218,54 @@ async function openEpub() {
   epubLocationsReady = false
   await rendition.display(restoredCfi || readerState.value.href || undefined)
   const firstDisplayedCfi = rendition.currentLocation()?.start?.cfi || ''
-  book.locations.generate(900).then(async () => {
+  void prepareEpubLocations(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress })
+}
+
+/** 分页定位表按书缓存在 IndexedDB，以电子书 SHA-256 为失效依据：命中直接
+ *  校准进度，未命中才重新生成并写回缓存。定位表只与书的内容有关，与字号、
+ *  视口无关；大书 generate 要花数秒，缓存是打开速度的关键。 */
+async function prepareEpubLocations(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress }) {
+  const bookId = String(props.book.id)
+  const checksum = String(props.book.checksum || '')
+  try {
+    const cached = await getEpubLocations(bookId)
+    if (epubBook !== book) return
+    if (cached?.locations && (!checksum || !cached.checksum || cached.checksum === checksum)) {
+      book.locations.load(cached.locations)
+      epubLocationsReady = true
+      await calibrateEpubProgress(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress })
+      return
+    }
+  } catch { /* 缓存读不到就重新生成。 */ }
+  try {
+    await book.locations.generate(900)
     if (epubBook !== book || epubRendition !== rendition) return
     epubLocationsReady = true
-    let location = rendition.currentLocation()
-    const currentCfi = location?.start?.cfi || ''
-    const currentProgress = currentCfi ? book.locations.percentageFromCfi(currentCfi) : null
-    const cfiProgress = restoredCfi ? book.locations.percentageFromCfi(restoredCfi) : null
-    const hasValidCfiProgress = Number.isFinite(cfiProgress)
-      && cfiProgress >= 0 && cfiProgress <= 1
-      && (cfiProgress > 0 || restoredProgress === 0)
-    const targetProgress = hasValidCfiProgress
-      ? cfiProgress
-      : Math.max(0, Math.min(100, restoredProgress)) / 100
+    saveEpubLocations(bookId, checksum, book.locations.save())
+    await calibrateEpubProgress(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress })
+  } catch { /* Page locations are an enhancement; CFI restore still works. */ }
+}
 
-    // EPUB.js 恢复部分 CFI 时可能落到较早页；按全书位置表校准，保留期间的用户翻页。
-    if (firstDisplayedCfi && currentCfi === firstDisplayedCfi
-      && Number.isFinite(currentProgress)
-      && Math.abs(currentProgress - targetProgress) > 0.01) {
-      await rendition.display(String(targetProgress))
-      location = rendition.currentLocation()
-    }
-    if (location) handleEpubRelocated(location)
-  }).catch(() => { /* Page locations are an enhancement; CFI restore still works. */ })
+async function calibrateEpubProgress(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress }) {
+  let location = rendition.currentLocation()
+  const currentCfi = location?.start?.cfi || ''
+  const currentProgress = currentCfi ? book.locations.percentageFromCfi(currentCfi) : null
+  const cfiProgress = restoredCfi ? book.locations.percentageFromCfi(restoredCfi) : null
+  const hasValidCfiProgress = Number.isFinite(cfiProgress)
+    && cfiProgress >= 0 && cfiProgress <= 1
+    && (cfiProgress > 0 || restoredProgress === 0)
+  const targetProgress = hasValidCfiProgress
+    ? cfiProgress
+    : Math.max(0, Math.min(100, restoredProgress)) / 100
+
+  // EPUB.js 恢复部分 CFI 时可能落到较早页；按全书位置表校准，保留期间的用户翻页。
+  if (firstDisplayedCfi && currentCfi === firstDisplayedCfi
+    && Number.isFinite(currentProgress)
+    && Math.abs(currentProgress - targetProgress) > 0.01) {
+    await rendition.display(String(targetProgress))
+    location = rendition.currentLocation()
+  }
+  if (location) handleEpubRelocated(location)
 }
 
 function flattenEpubToc(items, depth = 0) {
@@ -396,6 +431,11 @@ function handleResize() {
 
 function handleKeydown(event) {
   if (event.defaultPrevented || busy.value || errorMessage.value || notePanelOpen.value) return
+  if (event.key === 'Escape' && pdfSearchOpen.value) {
+    event.preventDefault()
+    closePdfSearch()
+    return
+  }
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
   const target = event.target
   if (target instanceof Element && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return
@@ -423,6 +463,89 @@ async function goToPdfPage(pageNumber) {
   updatePdfProgress()
   readerRoot.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+function togglePdfSearch() {
+  pdfSearchOpen.value = !pdfSearchOpen.value
+  if (pdfSearchOpen.value) nextTick(() => pdfSearchInput.value?.focus())
+  else closePdfSearch()
+}
+
+function closePdfSearch() {
+  if (pdfSearchTimer) window.clearTimeout(pdfSearchTimer)
+  pdfSearchTimer = null
+  pdfSearchOpen.value = false
+  pdfSearchQuery.value = ''
+  pdfSearchStatus.value = ''
+  pdfSearchMessage.value = ''
+  pdfSearchResults.value = []
+  pdfSearchTexts = null
+}
+
+function schedulePdfSearch() {
+  if (pdfSearchTimer) window.clearTimeout(pdfSearchTimer)
+  pdfSearchTimer = window.setTimeout(() => { pdfSearchTimer = null; void runPdfSearch() }, 240)
+}
+
+/** 首次搜索时逐页提取文本建索引，同一份文档内复用；索引是搜索质量的全部来源。 */
+async function ensurePdfSearchIndex() {
+  if (pdfSearchTexts) return pdfSearchTexts
+  const texts = []
+  for (let pageNumber = 1; pageNumber <= pdfPageCount.value; pageNumber += 1) {
+    if (!pdfDocument) break
+    pdfSearchStatus.value = `正在提取文本 ${pageNumber} / ${pdfPageCount.value} 页…`
+    const page = await pdfDocument.getPage(pageNumber)
+    const content = await page.getTextContent()
+    texts.push({ page: pageNumber, text: content.items.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim() })
+  }
+  pdfSearchTexts = texts
+  return texts
+}
+
+async function runPdfSearch() {
+  const term = pdfSearchQuery.value.trim().toLocaleLowerCase()
+  if (!term) {
+    pdfSearchResults.value = []
+    pdfSearchStatus.value = ''
+    pdfSearchMessage.value = ''
+    return
+  }
+  if (!pdfDocument) return
+  pdfSearchMessage.value = ''
+  try {
+    const texts = await ensurePdfSearchIndex()
+    if (!pdfDocument) return
+    pdfSearchStatus.value = '正在搜索…'
+    const results = []
+    for (const entry of texts) {
+      const haystack = entry.text.toLocaleLowerCase()
+      let cursor = haystack.indexOf(term)
+      let hits = 0
+      while (cursor >= 0 && results.length < 200 && hits < 5) {
+        const from = Math.max(0, cursor - 36)
+        const to = Math.min(entry.text.length, cursor + term.length + 56)
+        results.push({
+          page: entry.page,
+          snippet: (from ? '…' : '') + entry.text.slice(from, to) + (to < entry.text.length ? '…' : ''),
+        })
+        hits += 1
+        cursor = haystack.indexOf(term, cursor + Math.max(1, term.length))
+      }
+    }
+    pdfSearchResults.value = results
+    pdfSearchStatus.value = ''
+    pdfSearchMessage.value = results.length ? '' : '这份文档里没有找到这个词。'
+  } catch (error) {
+    pdfSearchStatus.value = ''
+    pdfSearchMessage.value = error?.message || '搜索失败，请重试。'
+  }
+}
+
+async function jumpToPdfSearchResult(result) {
+  pdfSearchOpen.value = false
+  await goToPdfPage(result.page)
+}
+
+watch(pdfSearchQuery, () => { schedulePdfSearch() })
 
 async function applyPdfAnchor(anchor) {
   const page = Math.max(1, Math.min(pdfPageCount.value || 1, Number(anchor.page) || 1))
@@ -617,6 +740,7 @@ function setZoom(amount) {
       <div class="ebook-toolbar" role="toolbar" aria-label="阅读工具">
         <button class="ebook-tool ebook-toc-toggle" type="button" :aria-expanded="isTocOpen" aria-label="目录和书签" title="目录和书签" @click="isTocOpen = !isTocOpen"><Icon name="list" size="17" /></button>
         <template v-if="isPdf">
+          <button class="ebook-tool" type="button" :aria-pressed="pdfSearchOpen" aria-label="在文档中搜索" title="在文档中搜索" @click="togglePdfSearch"><Icon name="search" size="17" /></button>
           <div class="ebook-page-jump"><button class="ebook-tool" type="button" aria-label="上一页" :disabled="pdfPage <= 1" @click="goToPdfPage(pdfPage - 1)">‹</button><form @submit.prevent="goToPdfPage(pdfPageInput)"><input v-model="pdfPageInput" aria-label="页码" inputmode="numeric" @change="goToPdfPage(pdfPageInput)" /><span>/ {{ pdfPageCount || '—' }}</span></form><button class="ebook-tool" type="button" aria-label="下一页" :disabled="pdfPage >= pdfPageCount" @click="goToPdfPage(pdfPage + 1)">›</button></div>
           <button class="ebook-tool ebook-zoom" type="button" aria-label="缩小页面" title="缩小" @click="setZoom(-0.15)">−</button><span class="ebook-zoom-label">{{ Math.round(pdfZoom * 100) }}%</span><button class="ebook-tool ebook-zoom" type="button" aria-label="放大页面" title="放大" @click="setZoom(0.15)">+</button>
         </template>
@@ -648,6 +772,21 @@ function setZoom(amount) {
         <div v-if="errorMessage" class="ebook-reader-error" role="alert"><Icon name="notes" size="20" /><strong>暂时无法打开这本书</strong><p>{{ errorMessage }}</p><button type="button" class="ebook-note-button" @click="reloadReader">重试</button><button type="button" class="ebook-note-button" @click="backToShelf">返回书架</button></div>
         <div v-else-if="busy" class="ebook-reader-loading" role="status"><span class="ebook-loading-spinner"></span><strong>正在准备阅读内容</strong><p>首次打开较大的文件可能需要一点时间。</p></div>        <template v-else-if="isPdf">
           <div class="ebook-content-heading"><div><span>{{ formatLabel }}</span><h1>{{ chapterTitle || book.title }}</h1></div><span v-if="pdfLoading" class="ebook-page-status">正在排版…</span><span v-else class="ebook-page-status">第 {{ pdfPage }} / {{ pdfPageCount }} 页</span></div>
+          <div v-if="pdfSearchOpen" class="ebook-pdf-search">
+            <div class="ebook-pdf-search-bar">
+              <Icon name="search" size="15" />
+              <input ref="pdfSearchInput" v-model="pdfSearchQuery" type="search" placeholder="在整份文档中查找…" aria-label="搜索 PDF 全文" />
+              <button class="ebook-pdf-search-close" type="button" aria-label="关闭搜索" @click="closePdfSearch"><Icon name="close" size="14" /></button>
+            </div>
+            <p v-if="pdfSearchStatus" class="ebook-pdf-search-status" role="status">{{ pdfSearchStatus }}</p>
+            <p v-else-if="pdfSearchMessage" class="ebook-pdf-search-status" role="status">{{ pdfSearchMessage }}</p>
+            <p v-else-if="pdfSearchResults.length" class="ebook-pdf-search-status">共 {{ pdfSearchResults.length }} 处匹配，点按跳到对应页：</p>
+            <div v-if="pdfSearchResults.length" class="ebook-pdf-search-results">
+              <button v-for="(result, index) in pdfSearchResults" :key="`${result.page}-${index}`" type="button" @click="jumpToPdfSearchResult(result)">
+                <span>第 {{ result.page }} 页</span><small>{{ result.snippet }}</small>
+              </button>
+            </div>
+          </div>
           <div ref="pdfStage" class="ebook-pdf-stage" @mouseup="handlePdfSelection">
             <div class="ebook-pdf-page-frame" :class="{ 'is-rendering': pdfLoading }"><canvas ref="pdfCanvas" aria-label="PDF 页面图像"></canvas><div ref="pdfTextLayer" class="textLayer"></div><div v-if="pdfHighlightStyles.length" class="pdf-note-highlight-layer" aria-hidden="true"><span v-for="(style, index) in pdfHighlightStyles" :key="index" class="pdf-note-highlight" :class="{ 'pdf-note-highlight--first': index === 0 }" :style="style"></span></div></div>
           </div>
@@ -690,6 +829,17 @@ function setZoom(amount) {
 .ebook-page-jump input { width: 32px; padding: 4px 0; border: 0; color: #515b69; background: transparent; font: inherit; font-size: 11px; text-align: center; outline: 0; }
 .ebook-page-jump .ebook-tool { width: 27px; height: 29px; flex-basis: 27px; font-size: 19px; }
 .ebook-zoom-label { min-width: 33px; color: #8d95a0; font-size: 9px; text-align: center; }
+.ebook-pdf-search { max-width: 980px; margin: 0 auto 13px; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 12px; background: #fff; box-shadow: 0 4px 16px rgb(39 47 58 / 6%); }
+.ebook-pdf-search-bar { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-bottom: 1px solid #eef0f3; color: #8a93a0; }
+.ebook-pdf-search-bar input { width: 100%; min-width: 0; border: 0; outline: 0; color: #4b5665; background: transparent; font: inherit; font-size: 12px; }
+.ebook-pdf-search-close { display: grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 7px; color: #8a93a0; background: transparent; cursor: pointer; }
+.ebook-pdf-search-close:hover { color: #4d7fca; background: #eef3fb; }
+.ebook-pdf-search-status { margin: 0; padding: 8px 12px; color: #8a93a0; font-size: 11px; }
+.ebook-pdf-search-results { display: grid; max-height: 216px; overflow: auto; padding: 4px 6px 8px; }
+.ebook-pdf-search-results button { display: grid; gap: 3px; padding: 7px 8px; border: 0; border-radius: 8px; color: #5d6878; background: transparent; text-align: left; cursor: pointer; }
+.ebook-pdf-search-results button:hover { background: #f2f6fc; }
+.ebook-pdf-search-results button span { color: #4d7fca; font-size: 10px; font-weight: 650; }
+.ebook-pdf-search-results button small { overflow: hidden; color: #7b8492; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .ebook-toc-scrim { display: none; }
 .ebook-reader-layout { min-height: calc(100vh - 64px); display: grid; grid-template-columns: 248px minmax(0, 1fr); }
 .ebook-toc { position: sticky; top: 64px; display: flex; height: calc(100vh - 64px); min-height: 410px; flex-direction: column; padding: 24px 15px 16px 18px; overflow: auto; border-right: 1px solid var(--ebook-line); background: color-mix(in srgb, var(--ebook-paper) 86%, white 14%); }

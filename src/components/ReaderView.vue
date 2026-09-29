@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import { getLocalRecord, localDataState, saveLocalRecord } from '../services/localDataStore.js'
+import { highlightToHtml } from '../services/codeHighlight.js'
 
 const props = defineProps({
   book: { type: Object, required: true },
@@ -486,7 +487,9 @@ function renderMarkdown(markdown, title = '', context = {}) {
       flushParagraph()
       closeList()
       if (codeLines) {
-        output.push(`<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+        const code = codeLines.join('\n')
+        const highlighted = highlightToHtml(code, codeLanguage)
+        output.push(`<pre><code class="${highlighted ? 'hljs ' : ''}${codeLanguage ? `language-${escapeHtml(codeLanguage)}` : ''}">${highlighted || escapeHtml(code)}</code></pre>`)
         codeLines = null
         codeLanguage = ''
       } else {
@@ -570,7 +573,11 @@ function renderMarkdown(markdown, title = '', context = {}) {
   flushQuote()
   flushParagraph()
   closeList()
-  if (codeLines) output.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+  if (codeLines) {
+    const code = codeLines.join('\n')
+    const highlighted = highlightToHtml(code, codeLanguage)
+    output.push(`<pre><code class="${highlighted ? 'hljs' : ''}">${highlighted || escapeHtml(code)}</code></pre>`)
+  }
   return output.join('\n') || '<p>这个章节还没有内容。</p>'
 }
 

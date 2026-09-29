@@ -1,3 +1,5 @@
+import { highlightToHtml } from './codeHighlight.js'
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -6,6 +8,12 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;',
   })[character])
+}
+
+function codeBlockHtml(code, language) {
+  const highlighted = highlightToHtml(code, language)
+  const classes = [highlighted ? 'hljs' : '', language ? 'language-' + escapeHtml(language) : ''].filter(Boolean).join(' ')
+  return '<pre><code' + (classes ? ' class="' + classes + '"' : '') + '>' + (highlighted || escapeHtml(code)) + '</code></pre>'
 }
 
 function renderInline(source, { links = true } = {}) {
@@ -45,6 +53,7 @@ export function renderNoteMarkdown(source) {
   let listType = ''
   let listItems = []
   let codeLines = []
+  let codeLanguage = ''
   let inCode = false
 
   const flushParagraph = () => {
@@ -72,8 +81,9 @@ export function renderNoteMarkdown(source) {
   for (const line of lines) {
     if (inCode) {
       if (/^\s*\x60{3}/.test(line)) {
-        output.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>')
+        output.push(codeBlockHtml(codeLines.join('\n'), codeLanguage))
         codeLines = []
+        codeLanguage = ''
         inCode = false
       } else {
         codeLines.push(line)
@@ -81,9 +91,11 @@ export function renderNoteMarkdown(source) {
       continue
     }
 
-    if (/^\s*\x60{3}/.test(line)) {
+    const fence = line.match(/^\s*\x60{3}\s*([\w+-]*)\s*$/)
+    if (fence) {
       flushTextBlocks()
       inCode = true
+      codeLanguage = fence[1] || ''
       continue
     }
 
@@ -133,7 +145,7 @@ export function renderNoteMarkdown(source) {
     paragraph.push(line)
   }
 
-  if (inCode) output.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>')
+  if (inCode) output.push(codeBlockHtml(codeLines.join('\n'), codeLanguage))
   flushTextBlocks()
   return output.join('')
 }
