@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import TaskEditorDialog from './TaskEditorDialog.vue'
-import { getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
+import { getLocalRecord, getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
 const mode = ref('周')
