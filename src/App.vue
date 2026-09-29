@@ -6,6 +6,7 @@ import DashboardView from './components/DashboardView.vue'
 import GlobalSearchDialog from './components/GlobalSearchDialog.vue'
 import Icon from './components/Icon.vue'
 import ReaderView from './components/ReaderView.vue'
+import StatsView from './components/StatsView.vue'
 import SyncCenter from './components/SyncCenter.vue'
 import WorkspaceView from './components/WorkspaceView.vue'
 import WorkbenchView from './components/WorkbenchView.vue'
@@ -35,6 +36,7 @@ const navigation = [
   { id: 'calendar', label: '日历', icon: 'calendar' },
   { id: 'notes', label: '笔记', icon: 'notes' },
   { id: 'review', label: '复习', icon: 'review' },
+  { id: 'stats', label: '统计', icon: 'trend' },
 ]
 
 const books = ref([])
@@ -311,6 +313,7 @@ function returnFromReader() {
         <BookshelfView v-else-if="currentPage === 'shelf'" :books="books" @open-book="openBook" @book-imported="addBook" @book-removed="removeBook" />
         <CalendarView v-else-if="currentPage === 'calendar'" :books="books" />
         <WorkspaceView v-else-if="currentPage === 'notes' || currentPage === 'review'" ref="workspaceView" :kind="currentPage" :books="books" @open-note="openNoteLocation" />
+        <StatsView v-else-if="currentPage === 'stats'" :books="books" @open-book="openBook" />
       </div>
     </section>
 
