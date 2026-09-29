@@ -3,11 +3,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ePub from 'epubjs'
 import Icon from './Icon.vue'
 import ReadingNotesPanel from './ReadingNotesPanel.vue'
+import SelectionCardDialog from './SelectionCardDialog.vue'
 import { getEbookFileUrl, loadEbookArrayBuffer } from '../services/ebookFileStore.js'
 import { ensureEbookAvailable } from '../services/ebookMigration.js'
 import { getEpubLocations, saveEpubLocations } from '../services/epubLocationCache.js'
 import { getLegacyReadingProgress } from '../services/legacyEbookStore.js'
-import { getLocalRecord, saveLocalRecord } from '../services/localDataStore.js'
+import { getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { createHighlight, createReviewCardFromQuote, highlightColor } from '../services/readingCaptures.js'
+import { startReadingSession, stopReadingSession } from '../services/readingTimeTracker.js'
 
 const props = defineProps({
   book: { type: Object, required: true },
@@ -43,6 +46,7 @@ const selectedExcerpt = ref('')
 const selectedAnchor = ref(null)
 const selectedChapterTitle = ref('')
 const selectionAction = ref({ visible: false, top: 0, left: 0 })
+const isCardDialogOpen = ref(false)
 const pdfSearchOpen = ref(false)
 const pdfSearchInput = ref(null)
 const pdfSearchQuery = ref('')
@@ -81,14 +85,30 @@ const readerClass = computed(() => ({
   'ebook-reader--pdf': isPdf.value,
 }))
 const currentAnchor = computed(() => isPdf.value ? { page: pdfPage.value } : { cfi: currentEpubCfi.value, href: currentEpubHref.value })
+const bookHighlights = computed(() => getLocalRecords('note').filter((note) => note.type === 'highlight'
+  && String(note.bookId) === String(props.book.id)))
 const pdfHighlightStyles = computed(() => {
-  if (pdfNoteHighlight.value?.page !== pdfPage.value) return []
-  return pdfNoteHighlight.value.rects.map((rect) => ({
-    left: `${rect.x * 100}%`,
-    top: `${rect.y * 100}%`,
-    width: `${rect.width * 100}%`,
-    height: `${rect.height * 100}%`,
-  }))
+  const styles = []
+  const pushRects = (rects, color, first = false) => {
+    for (const rect of rects) {
+      styles.push({
+        left: `${rect.x * 100}%`,
+        top: `${rect.y * 100}%`,
+        width: `${rect.width * 100}%`,
+        height: `${rect.height * 100}%`,
+        background: color,
+        first,
+      })
+    }
+  }
+  if (pdfNoteHighlight.value?.page === pdfPage.value) {
+    pushRects(pdfNoteHighlight.value.rects, 'rgba(110, 152, 212, .4)', true)
+  }
+  for (const highlight of bookHighlights.value) {
+    if (highlight.anchor?.page !== pdfPage.value) continue
+    pushRects(normalizePdfRectangles(highlight.anchor.rects), highlightColor(highlight.color))
+  }
+  return styles
 })
 const currentBookmark = computed(() => bookmarks.value.some((item) => isPdf.value
   ? item.anchor?.page === pdfPage.value
@@ -97,12 +117,14 @@ const currentBookmark = computed(() => bookmarks.value.some((item) => isPdf.valu
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeydown)
+  startReadingSession(props.book.id)
   void loadBook()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('keydown', handleKeydown)
+  stopReadingSession()
   resizeObserver?.disconnect()
   if (saveTimer) window.clearTimeout(saveTimer)
   if (isReady && isDirty) void flushProgress()
@@ -218,6 +240,7 @@ async function openEpub() {
   epubLocationsReady = false
   await rendition.display(restoredCfi || readerState.value.href || undefined)
   const firstDisplayedCfi = rendition.currentLocation()?.start?.cfi || ''
+  hydrateEpubHighlights(rendition)
   void prepareEpubLocations(book, rendition, { firstDisplayedCfi, restoredCfi, restoredProgress })
 }
 
@@ -687,6 +710,62 @@ function openSelectedNote() {
   selectionAction.value.visible = false
 }
 
+function openCardFromSelection() {
+  selectionAction.value.visible = false
+  isCardDialogOpen.value = true
+}
+
+async function saveSelectionCard({ front, back, resolve, reject }) {
+  try {
+    await createReviewCardFromQuote({
+      bookId: String(props.book.id),
+      chapterId: isPdf.value ? '' : String(selectedAnchor.value?.href || ''),
+      front,
+      back,
+    })
+    resolve()
+  } catch (error) { reject(error) }
+}
+
+/** EPUB 高亮：epubjs 的 annotations 层负责渲染与翻页后重绘，
+ *  打开书时按存储的 CFI 一次性重建。 */
+function addEpubAnnotation(rendition, highlight) {
+  const cfi = String(highlight.anchor?.cfi || '')
+  if (!cfi) return
+  try {
+    rendition.annotations.add('highlight', cfi, { id: highlight.id }, () => {}, 'zhixu-epub-highlight', {
+      fill: highlightColor(highlight.color),
+      'fill-opacity': '1',
+      'mix-blend-mode': 'multiply',
+    })
+  } catch { /* 定位失效的旧划线直接跳过。 */ }
+}
+
+function hydrateEpubHighlights(rendition) {
+  if (!rendition) return
+  for (const highlight of bookHighlights.value) addEpubAnnotation(rendition, highlight)
+}
+
+async function highlightFromSelection() {
+  selectionAction.value.visible = false
+  try {
+    const highlight = {
+      bookId: String(props.book.id),
+      chapterId: isPdf.value ? '' : String(selectedAnchor.value?.href || ''),
+      chapterTitle: selectedChapterTitle.value,
+      excerpt: selectedExcerpt.value,
+      anchor: selectedAnchor.value,
+      format: isPdf.value ? 'pdf' : 'epub',
+    }
+    await createHighlight(highlight)
+    if (!isPdf.value && epubRendition) {
+      addEpubAnnotation(epubRendition, { ...highlight, id: '', color: 'yellow' })
+    }
+  } catch (error) {
+    storageError.value = error.message || '划线没有保存成功，请稍后重试。'
+  }
+}
+
 function toggleBookmark() {
   const anchor = currentAnchor.value
   if (currentBookmark.value) {
@@ -801,7 +880,13 @@ function setZoom(amount) {
       </section>
     </div>
 
-    <button v-if="selectionAction.visible" class="ebook-selection-action" type="button" :style="{ top: `${selectionAction.top}px`, left: `${selectionAction.left}px` }" @mousedown.prevent @click="openSelectedNote"><Icon name="notes" size="14" />记下这段</button>
+    <div v-if="selectionAction.visible" class="ebook-selection-action" :style="{ top: `${selectionAction.top}px`, left: `${selectionAction.left}px` }" @mousedown.prevent>
+      <button type="button" @click="highlightFromSelection"><span class="ebook-selection-swatch" aria-hidden="true"></span>划线</button>
+      <button type="button" @click="openCardFromSelection"><Icon name="review" size="14" />复习卡</button>
+      <button type="button" @click="openSelectedNote"><Icon name="notes" size="14" />记笔记</button>
+    </div>
+
+    <SelectionCardDialog :open="isCardDialogOpen" :quote="selectedExcerpt" :source="`${book.title} · ${selectedChapterTitle || chapterTitle}`" @close="isCardDialogOpen = false" @save="saveSelectionCard" />
     <ReadingNotesPanel :open="notePanelOpen" :book="book" :anchor="selectedAnchor || currentAnchor" :excerpt="selectedExcerpt" :chapter-title="selectedChapterTitle || chapterTitle" @close="notePanelOpen = false" @jump="jumpToAnchor" />
   </main>
 </template>
@@ -883,8 +968,10 @@ function setZoom(amount) {
 .ebook-reader-loading strong, .ebook-reader-error strong { color: #596574; font-size: 14px; }.ebook-reader-loading p, .ebook-reader-error p { max-width: 480px; margin: 0; color: #9aa1aa; font-size: 12.5px; line-height: 1.7; }
 .ebook-reader-error .ebook-note-button { margin-top: 5px; }.ebook-loading-spinner { width: 24px; height: 24px; border: 2px solid #e5e9ef; border-top-color: #6f9ada; border-radius: 50%; animation: ebook-spin .8s linear infinite; }
 .ebook-storage-error { max-width: 980px; margin: 12px auto 0; color: #b36b45; font-size: 12px; text-align: center; }
-.ebook-selection-action { position: fixed; z-index: 30; display: inline-flex; height: 34px; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid #dbe3ef; border-radius: 9px; color: #4d6f9f; background: #fff; box-shadow: 0 5px 18px rgb(32 44 61 / 13%); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.ebook-selection-action:hover { color: #396eb9; background: #f4f8fe; }
+.ebook-selection-action { position: fixed; z-index: 30; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; box-shadow: 0 5px 18px rgb(32 44 61 / 13%); }
+.ebook-selection-action button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border: 0; border-radius: 7px; color: #4d6f9f; background: transparent; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ebook-selection-action button:hover { color: #396eb9; background: #f4f8fe; }
+.ebook-selection-swatch { width: 12px; height: 12px; flex: 0 0 12px; border-radius: 3px; background: linear-gradient(120deg, rgba(233, 217, 142, .95), rgba(169, 198, 234, .95)); }
 .ebook-reader button:focus-visible { outline: 3px solid rgb(77 128 202 / 34%); outline-offset: 2px; }
 @keyframes ebook-spin { to { transform: rotate(360deg); } }
 @media (max-width: 1060px) { .ebook-reader-topbar { grid-template-columns: 110px minmax(200px, .8fr) minmax(330px, 1.6fr); gap: 9px; padding: 0 14px; }.ebook-reader-layout { grid-template-columns: 220px minmax(0, 1fr); }.ebook-reading-area { padding-right: 26px; padding-left: 26px; }.ebook-toc { padding-right: 12px; padding-left: 13px; } }

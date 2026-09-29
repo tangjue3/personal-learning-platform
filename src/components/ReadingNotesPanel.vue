@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import MarkdownNoteInput from './MarkdownNoteInput.vue'
 import { deleteLegacyReadingNote, listLegacyReadingNotes } from '../services/legacyEbookStore.js'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { createReviewCardFromQuote } from '../services/readingCaptures.js'
 import { renderNoteInline } from '../services/noteMarkdown.js'
 
 const props = defineProps({
@@ -27,6 +28,8 @@ const editingId = ref('')
 const confirmDeleteId = ref('')
 const isSaving = ref(false)
 const errorMessage = ref('')
+const cardBusyId = ref('')
+const cardNotice = ref('')
 
 const bookId = computed(() => props.book?.id || props.book?.bookId || '')
 const bookTitle = computed(() => props.book?.title || props.book?.name || '未命名书籍')
@@ -158,6 +161,26 @@ function jumpToNote(note) {
   emit('close')
 }
 
+async function makeCardFromNote(note) {
+  if (cardBusyId.value) return
+  cardBusyId.value = note.id
+  cardNotice.value = ''
+  try {
+    await createReviewCardFromQuote({
+      bookId: note.bookId,
+      chapterId: note.chapterId,
+      front: note.excerpt || note.title,
+      back: note.content || '',
+    })
+    cardNotice.value = '已生成一张复习卡，到期后出现在复习队列。'
+  } catch (error) {
+    cardNotice.value = ''
+    errorMessage.value = error?.message || '复习卡没有生成成功，请稍后重试。'
+  } finally {
+    cardBusyId.value = ''
+  }
+}
+
 function formatDate(value) {
   if (!value) return ''
   const date = new Date(value)
@@ -218,6 +241,9 @@ function formatDate(value) {
             <footer>
               <time :datetime="note.updatedAt">{{ formatDate(note.updatedAt) }}</time>
               <div>
+                <button type="button" :disabled="isSaving || cardBusyId === note.id" @click="makeCardFromNote(note)">
+                  {{ cardBusyId === note.id ? '生成中…' : '制作复习卡' }}
+                </button>
                 <button type="button" :disabled="isSaving" @click="editNote(note)">编辑</button>
                 <button type="button" class="delete-note-action" :disabled="isSaving" @click="toggleDelete(note)">
                   {{ confirmDeleteId === note.id ? '再点一次删除' : '删除' }}
@@ -233,6 +259,7 @@ function formatDate(value) {
         </div>
 
         <p v-if="errorMessage" class="reading-notes-error" role="alert">{{ errorMessage }}</p>
+        <p v-else-if="cardNotice" class="reading-notes-card-notice" role="status">{{ cardNotice }}</p>
         <p class="reading-notes-local-hint">笔记只保存在本机，可以随时回来继续整理。</p>
       </aside>
     </div>
@@ -290,6 +317,7 @@ function formatDate(value) {
 .reading-notes-empty strong { color: #656b75; font-size: 13.5px; font-weight: 600; }
 .reading-notes-empty p { margin: 0; font-size: 12px; }
 .reading-notes-error { margin: 10px 0 0; color: #ae473e; font-size: 12.5px; line-height: 1.5; }
+.reading-notes-card-notice { margin: 10px 0 0; color: #5a8d6a; font-size: 12.5px; line-height: 1.5; }
 .reading-notes-local-hint { margin: auto 0 0; padding-top: 18px; color: #a0a4aa; font-size: 12px; text-align: center; }
 .reading-notes-panel button:focus-visible { outline: 3px solid rgb(70 111 208 / 32%); outline-offset: 2px; }
 @keyframes notes-scrim-in { from { opacity: 0; } to { opacity: 1; } }

@@ -1,8 +1,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
-import { getLocalRecord, localDataState, saveLocalRecord } from '../services/localDataStore.js'
+import SelectionCardDialog from './SelectionCardDialog.vue'
+import { getLocalRecord, getLocalRecords, localDataState, saveLocalRecord } from '../services/localDataStore.js'
 import { highlightToHtml } from '../services/codeHighlight.js'
+import { createHighlight, createReviewCardFromQuote, highlightColor } from '../services/readingCaptures.js'
+import { startReadingSession, stopReadingSession } from '../services/readingTimeTracker.js'
 
 const props = defineProps({
   book: { type: Object, required: true },
@@ -71,6 +74,11 @@ const noteDraft = ref({ title: '', body: '' })
 const noteError = ref('')
 const noteBusy = ref(false)
 let noteDraftBaseline = ''
+const isCardDialogOpen = ref(false)
+const cardError = ref('')
+const chapterHighlights = computed(() => getLocalRecords('note').filter((note) => note.type === 'highlight'
+  && String(note.bookId) === String(props.book.id)
+  && String(note.anchor?.chapterId || note.chapterId || '') === String(activeDocument.value?.id || '')))
 const chapterName = computed(() => chapters.value[activeChapter.value]?.title || chapters.value[0]?.title || '')
 const activeDocument = computed(() => chapters.value[activeChapter.value])
 const readingProgress = computed(() => chapters.value.length
@@ -643,8 +651,64 @@ function createMarkdownAnchor(container, range, exact) {
   }
 }
 
-function findAnchorOffset(fullText, anchor) {
-  const exact = String(anchor.exact || '').trim()
+/** 章节渲染后把本书划线重绘成 <mark>：先清掉旧标记还原纯文本，
+ *  再按锚点在 textContent 里的偏移逐段包一层，偏移全程保持有效。 */
+function paintChapterHighlights() {
+  const content = readerRoot.value?.querySelector('.reader-markdown')
+  if (!content) return
+  content.querySelectorAll('mark.reader-highlight-mark').forEach((mark) => {
+    const parent = mark.parentNode
+    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
+    mark.remove()
+    parent.normalize()
+  })
+  if (!chapterHighlights.value.length) return
+  const fullText = content.textContent || ''
+  for (const highlight of chapterHighlights.value) {
+    const anchor = highlight.anchor || {}
+    const exact = String(anchor.exact || '').trim()
+    let start = findAnchorOffset(fullText, anchor)
+    if (start === null && exact) start = fullText.indexOf(exact)
+    if (start === null || start < 0) continue
+    const length = Number.isFinite(Number(anchor.end)) && Number(anchor.end) > start
+      ? Math.min(Number(anchor.end) - start, exact.length || Number(anchor.end) - start)
+      : exact.length
+    wrapTextOffsetWithMark(content, start, start + (length > 0 ? length : 0), highlightColor(highlight.color))
+  }
+}
+
+function wrapTextOffsetWithMark(container, start, end, color) {
+  if (!(end > start)) return
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const segments = []
+  let offset = 0
+  let node = walker.nextNode()
+  while (node) {
+    const length = node.textContent.length
+    if (offset < end && offset + length > start) {
+      segments.push({ node, from: Math.max(0, start - offset), to: Math.min(length, end - offset) })
+    }
+    offset += length
+    node = walker.nextNode()
+  }
+  for (const segment of segments.reverse()) {
+    let target = segment.node
+    try {
+      if (segment.to < target.textContent.length) target.splitText(segment.to)
+      if (segment.from > 0) target = target.splitText(segment.from)
+    } catch { /* 节点可能已被相邻划线拆分，跳过这一段。 */ }
+    if (!target.parentNode) continue
+    const mark = document.createElement('mark')
+    mark.className = 'reader-highlight-mark'
+    mark.style.background = color
+    target.parentNode.insertBefore(mark, target)
+    mark.appendChild(target)
+  }
+}
+
+watch([chapterHighlights, renderedDocument], () => { nextTick(paintChapterHighlights) })
+
+function findAnchorOffset(fullText, anchor) {  const exact = String(anchor.exact || '').trim()
   if (!exact) return null
   const expected = Math.max(0, Number(anchor.start) || 0)
   const prefix = String(anchor.prefix || '').slice(-48)
@@ -732,6 +796,45 @@ function openNoteFromSelection() {
   isNoteDialogOpen.value = true
 }
 
+async function highlightFromSelection() {
+  selectionAction.value.visible = false
+  try {
+    await createHighlight({
+      bookId: String(props.book.id),
+      chapterId: String(activeDocument.value?.id || ''),
+      chapterTitle: chapterName.value,
+      excerpt: selectedQuote.value,
+      anchor: selectedAnchor.value,
+      format: 'markdown',
+    })
+    storageHint.value = '已划线，这段文字会一直高亮显示。'
+  } catch (error) {
+    storageHint.value = error.message || '划线没有保存成功，请稍后重试。'
+  }
+}
+
+function openCardFromSelection() {
+  selectionAction.value.visible = false
+  cardError.value = ''
+  isCardDialogOpen.value = true
+}
+
+async function saveSelectionCard({ front, back, resolve, reject }) {
+  try {
+    await createReviewCardFromQuote({
+      bookId: String(props.book.id),
+      chapterId: String(activeDocument.value?.id || ''),
+      front,
+      back,
+    })
+    storageHint.value = '复习卡已生成，到期会出现在复习队列里。'
+    resolve()
+  } catch (error) {
+    cardError.value = error.message || '卡片没有保存成功，请稍后重试。'
+    reject(error)
+  }
+}
+
 function closeNoteDialog() {
   if (noteBusy.value) return
   const hasDraft = JSON.stringify(noteDraft.value) !== noteDraftBaseline
@@ -789,6 +892,7 @@ watch(
 
 onMounted(async () => {
   legacyState = initialSavedState
+  startReadingSession(props.book.id)
   scrollContainer = readerRoot.value?.closest('.app-shell--reader') || null
   scrollContainer?.addEventListener('scroll', handleScroll, { passive: true })
   document.addEventListener('selectionchange', scheduleSelectionAction)
@@ -801,6 +905,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   isReaderUnmounted = true
+  stopReadingSession()
   window.removeEventListener('beforeunload', protectUnsavedProgress)
   document.removeEventListener('selectionchange', scheduleSelectionAction)
   if (selectionTimer) window.clearTimeout(selectionTimer)
@@ -840,8 +945,12 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="selectionAction.visible" class="reader-selection-action" :class="{ 'is-below': selectionAction.placement === 'below' }" :style="{ top: `${selectionAction.top}px`, left: `${selectionAction.left}px` }" @mousedown.prevent @mouseup.stop>
-      <button type="button" @click="openNoteFromSelection"><Icon name="notes" size="15" /> 把摘录记成笔记</button>
+      <button type="button" @click="highlightFromSelection"><span class="selection-highlight-swatch" aria-hidden="true"></span> 划线</button>
+      <button type="button" @click="openCardFromSelection"><Icon name="review" size="15" /> 复习卡</button>
+      <button type="button" @click="openNoteFromSelection"><Icon name="notes" size="15" /> 笔记</button>
     </div>
+
+    <SelectionCardDialog :open="isCardDialogOpen" :quote="selectedQuote" :source="`${book.title} · ${chapterName}`" @close="isCardDialogOpen = false" @save="saveSelectionCard" />
 
     <div v-if="isNoteDialogOpen" class="reader-note-backdrop" @click.self="closeNoteDialog">
       <form class="reader-note-dialog" role="dialog" aria-modal="true" aria-labelledby="reader-note-title" @submit.prevent="saveReadingNote">
@@ -901,6 +1010,8 @@ onBeforeUnmount(() => {
 .chapter-completion-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 9px; border: 1px solid #e7ebf0; border-radius: 9px; color: #8a95a4; background: #fff; font: inherit; font-size: 11px; cursor: pointer; }
 .chapter-completion-button.is-complete { border-color: #dceadf; color: #5f8a6b; background: #f5faf6; }
 .reader-markdown { color: #66717f; font-size: var(--reader-font-size); line-height: 1.9; letter-spacing: .01em; overflow-wrap: anywhere; }
+.reader-markdown :deep(mark.reader-highlight-mark) { padding: .04em 0; border-radius: 3px; color: inherit; }
+.selection-highlight-swatch { width: 13px; height: 13px; flex: 0 0 13px; border-radius: 4px; background: linear-gradient(120deg, rgba(233, 217, 142, .95), rgba(169, 198, 234, .95)); }
 .reader-markdown :deep(img) { max-width: 100%; height: auto; display: block; margin: 18px auto; border-radius: 8px; }
 .reader-markdown :deep(.reader-image-missing) { display: inline-block; padding: 7px 10px; border-radius: 7px; color: #9a7b72; background: #f9f1ee; font-size: .8em; }
 .reader-markdown :deep(.reader-link-unavailable) { color: #8d96a3; text-decoration: underline dotted; text-underline-offset: 3px; }

@@ -31,6 +31,9 @@ const activityByDay = computed(() => {
     if (/^review-stats-\d{4}-\d{2}-\d{2}$/.test(String(record.id || '')) && Number(record.total) > 0) {
       mark(record.date || String(record.id).slice('review-stats-'.length), 'review')
     }
+    if (/^reading-time-\d{4}-\d{2}-\d{2}$/.test(String(record.id || '')) && Number(record.totalSeconds) > 0) {
+      mark(String(record.id).slice('reading-time-'.length), 'read')
+    }
   }
   for (const note of getLocalRecords('note')) mark(String(note.createdAt || '').slice(0, 10), 'note')
   return activity
@@ -95,6 +98,118 @@ function currentDateKey() {
   return dateKey(new Date())
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** reading-time-日期 记录由阅读器心跳写入：totalSeconds + byBook + byHour。 */
+const readingTimeByDay = computed(() => {
+  const map = new Map()
+  for (const record of getLocalRecords('preference')) {
+    if (!/^reading-time-\d{4}-\d{2}-\d{2}$/.test(String(record.id || ''))) continue
+    const day = String(record.id).slice('reading-time-'.length)
+    map.set(day, {
+      totalSeconds: Number(record.totalSeconds) || 0,
+      byBook: record.byBook && typeof record.byBook === 'object' ? record.byBook : {},
+      byHour: record.byHour && typeof record.byHour === 'object' ? record.byHour : {},
+    })
+  }
+  return map
+})
+
+const reviewStatsByDay = computed(() => {
+  const map = new Map()
+  for (const record of getLocalRecords('preference')) {
+    if (!/^review-stats-\d{4}-\d{2}-\d{2}$/.test(String(record.id || ''))) continue
+    map.set(String(record.id).slice('review-stats-'.length), {
+      total: Number(record.total) || 0,
+      remembered: (Number(record.counts?.good) || 0) + (Number(record.counts?.easy) || 0),
+    })
+  }
+  return map
+})
+
+const todayReadingMinutes = computed(() => Math.round((readingTimeByDay.value.get(currentDateKey())?.totalSeconds || 0) / 60))
+const weekReadingSeconds = computed(() => {
+  const cutoff = dateKey(new Date(Date.now() - 6 * DAY_MS))
+  let total = 0
+  for (const [day, data] of readingTimeByDay.value) {
+    if (day >= cutoff) total += data.totalSeconds
+  }
+  return total
+})
+
+const readingTrend = computed(() => {
+  const days = []
+  for (let index = 13; index >= 0; index -= 1) {
+    const key = dateKey(new Date(Date.now() - index * DAY_MS))
+    days.push({
+      key,
+      minutes: Math.round((readingTimeByDay.value.get(key)?.totalSeconds || 0) / 60),
+      label: `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}`,
+    })
+  }
+  return days
+})
+const readingTrendPeak = computed(() => Math.max(30, ...readingTrend.value.map((day) => day.minutes)))
+
+const timeBuckets = computed(() => {
+  const ranges = [
+    { label: '凌晨 0-5', from: 0, to: 5 },
+    { label: '早晨 6-8', from: 6, to: 8 },
+    { label: '上午 9-11', from: 9, to: 11 },
+    { label: '中午 12-13', from: 12, to: 13 },
+    { label: '下午 14-17', from: 14, to: 17 },
+    { label: '傍晚 18-19', from: 18, to: 19 },
+    { label: '晚上 20-22', from: 20, to: 22 },
+    { label: '深夜 23', from: 23, to: 23 },
+  ]
+  const byHour = new Map()
+  for (const data of readingTimeByDay.value.values()) {
+    for (const [hour, seconds] of Object.entries(data.byHour)) byHour.set(hour, (byHour.get(hour) || 0) + seconds)
+  }
+  const secondsIn = (range) => {
+    let sum = 0
+    for (let hour = range.from; hour <= range.to; hour += 1) sum += byHour.get(String(hour)) || 0
+    return sum
+  }
+  const peak = Math.max(1, ...ranges.map(secondsIn))
+  return ranges.map((range) => {
+    const seconds = secondsIn(range)
+    return { label: range.label, minutes: Math.round(seconds / 60), percent: Math.round((seconds / peak) * 100) }
+  })
+})
+
+const bookReadingMinutes = computed(() => {
+  const cutoff = dateKey(new Date(Date.now() - 29 * DAY_MS))
+  const totals = new Map()
+  for (const [day, data] of readingTimeByDay.value) {
+    if (day < cutoff) continue
+    for (const [bookId, seconds] of Object.entries(data.byBook)) {
+      totals.set(bookId, (totals.get(bookId) || 0) + seconds)
+    }
+  }
+  return totals
+})
+
+const reviewWeekStats = computed(() => {
+  const cutoff = dateKey(new Date(Date.now() - 6 * DAY_MS))
+  let total = 0
+  let remembered = 0
+  for (const [day, data] of reviewStatsByDay.value) {
+    if (day < cutoff) continue
+    total += data.total
+    remembered += data.remembered
+  }
+  return { total, accuracy: total ? Math.round((remembered / total) * 100) : null }
+})
+
+function formatMinutes(minutes) {
+  if (!minutes) return '0 分钟'
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (!hours) return `${minutes} 分钟`
+  return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`
+}
+
 const bookRows = computed(() => [...props.books]
   .sort((a, b) => String(b.lastReadAt || '').localeCompare(String(a.lastReadAt || '')) || a.title.localeCompare(b.title, 'zh-CN'))
   .map((book) => {
@@ -110,6 +225,7 @@ const bookRows = computed(() => [...props.books]
       chapters,
       completed,
       lastReadAt: book.lastReadAt || '',
+      minutes: Math.round((bookReadingMinutes.value.get(String(book.id)) || 0) / 60),
     }
   }))
 
@@ -136,6 +252,8 @@ function bookMeta(row) {
     </header>
 
     <section class="stats-overview">
+      <article class="surface-card stats-metric"><span class="section-kicker">今日阅读</span><strong>{{ todayReadingMinutes }}<small> 分钟</small></strong><span class="stats-metric-note">打开阅读器并停留的时间</span></article>
+      <article class="surface-card stats-metric"><span class="section-kicker">本周阅读</span><strong>{{ formatMinutes(Math.round(weekReadingSeconds / 60)) }}</strong><span class="stats-metric-note">最近 7 天的真实投入</span></article>
       <article class="surface-card stats-metric"><span class="section-kicker">累计学习</span><strong>{{ activeDays }}<small> 天</small></strong><span class="stats-metric-note">阅读、复习或记笔记的日子</span></article>
       <article class="surface-card stats-metric"><span class="section-kicker">连续打卡</span><strong>{{ studyStreak }}<small> 天</small></strong><span class="stats-metric-note">今天读一点就能延续</span></article>
       <article class="surface-card stats-metric"><span class="section-kicker">私人笔记</span><strong>{{ notes.length }}<small> 条</small></strong><span class="stats-metric-note">只保存在本机</span></article>
@@ -156,11 +274,36 @@ function bookMeta(row) {
 
     <div class="stats-columns">
       <section class="surface-card stats-panel">
+        <header class="stats-panel-heading"><div><span class="section-kicker">阅读投入</span><h2>最近 14 天的阅读时长</h2></div></header>
+        <div class="stats-bar-chart" role="img" aria-label="最近 14 天每天的阅读分钟数">
+          <div v-for="day in readingTrend" :key="day.key" class="stats-bar-column">
+            <span class="stats-bar-value">{{ day.minutes || '' }}</span>
+            <i :style="{ height: `${Math.max(day.minutes ? 4 : 2, Math.round((day.minutes / readingTrendPeak) * 100))}%` }" :class="{ 'is-empty': !day.minutes }"></i>
+            <span class="stats-bar-label">{{ day.label }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface-card stats-panel">
+        <header class="stats-panel-heading"><div><span class="section-kicker">学习时段</span><h2>你习惯什么时候读</h2></div></header>
+        <div class="stats-hour-rows">
+          <div v-for="bucket in timeBuckets" :key="bucket.label" class="stats-hour-row">
+            <span class="stats-hour-label">{{ bucket.label }}</span>
+            <span class="stats-hour-track"><i :style="{ width: `${bucket.percent}%` }"></i></span>
+            <strong>{{ bucket.minutes ? formatMinutes(bucket.minutes) : '—' }}</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stats-columns">
+      <section class="surface-card stats-panel">
         <header class="stats-panel-heading"><div><span class="section-kicker">书籍投入</span><h2>{{ bookRows.length }} 本在学习</h2></div></header>
         <div v-if="bookRows.length" class="stats-book-list">
           <button v-for="row in bookRows" :key="row.id" type="button" class="stats-book-row" @click="emit('open-book', props.books.find((book) => book.id === row.id))">
             <span class="stats-book-spine" :style="{ background: row.color }"></span>
             <span class="stats-book-copy"><strong>{{ row.title }}</strong><small>{{ bookMeta(row) }}</small><span class="progress-track"><i :style="{ width: `${row.progress}%` }"></i></span></span>
+            <span class="stats-book-side"><strong>{{ row.minutes ? formatMinutes(row.minutes) : '—' }}</strong><span>近 30 天</span></span>
             <span class="stats-book-progress">{{ row.progress }}%</span>
           </button>
         </div>
@@ -172,10 +315,12 @@ function bookMeta(row) {
         <div class="stats-review-grid">
           <div class="stats-review-item"><strong>{{ reviewDailyStats.todayTotal }}</strong><span>今日已复习</span></div>
           <div class="stats-review-item"><strong>{{ reviewDailyStats.accuracy === null ? '—' : reviewDailyStats.accuracy + '%' }}</strong><span>今日记得率</span></div>
+          <div class="stats-review-item"><strong>{{ reviewWeekStats.total }}</strong><span>近 7 天复习</span></div>
+          <div class="stats-review-item"><strong>{{ reviewWeekStats.accuracy === null ? '—' : reviewWeekStats.accuracy + '%' }}</strong><span>近 7 天记得率</span></div>
           <div class="stats-review-item"><strong>{{ dueCards.length }}</strong><span>等待复习</span></div>
           <div class="stats-review-item"><strong>{{ cards.length }}</strong><span>卡片总数</span></div>
         </div>
-        <p class="stats-panel-note">记得率按「记得 + 简单」占今日评分的比例计算。</p>
+        <p class="stats-panel-note">记得率按「记得 + 简单」占评分的比例计算；阅读时长来自阅读器心跳，离开页面或长时间无操作会自动暂停。</p>
       </section>
     </div>
   </main>
@@ -184,11 +329,26 @@ function bookMeta(row) {
 <style scoped>
 .stats-heading { align-items: center; }
 .stats-heading h1 { margin-top: 7px; }
-.stats-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.stats-metric { display: grid; gap: 6px; padding: 16px 17px; }
-.stats-metric strong { color: #2f3c4f; font-size: 26px; font-weight: 650; letter-spacing: -.03em; }
-.stats-metric small { color: #7d8b9e; font-size: 13.5px; font-weight: 500; }
-.stats-metric-note { color: #97a1ad; font-size: 12.5px; }
+.stats-overview { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.stats-metric { display: grid; gap: 6px; padding: 16px 15px; }
+.stats-metric strong { color: #2f3c4f; font-size: 22px; font-weight: 650; letter-spacing: -.03em; }
+.stats-metric small { color: #7d8b9e; font-size: 12.5px; font-weight: 500; }
+.stats-metric-note { color: #97a1ad; font-size: 11.5px; line-height: 1.5; }
+.stats-bar-chart { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 7px; align-items: end; min-height: 168px; padding-top: 6px; }
+.stats-bar-column { display: grid; grid-template-rows: 1fr auto auto; justify-items: center; align-items: end; gap: 5px; height: 100%; }
+.stats-bar-column i { width: 100%; max-width: 26px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, #79a8dc, #5b8cc4); min-height: 2px; }
+.stats-bar-column i.is-empty { background: #edf0f4; }
+.stats-bar-value { color: #7d8b9e; font-size: 10px; line-height: 1; min-height: 12px; }
+.stats-bar-label { color: #9aa4b0; font-size: 10px; white-space: nowrap; }
+.stats-hour-rows { display: grid; gap: 9px; align-content: start; }
+.stats-hour-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.stats-hour-label { color: #8b97a6; font-size: 11.5px; white-space: nowrap; }
+.stats-hour-track { height: 9px; border-radius: 5px; background: #eef1f5; overflow: hidden; }
+.stats-hour-track i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9cc0e8, #6b9fd6); }
+.stats-hour-row strong { color: #5b6b80; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stats-book-side { display: grid; flex: 0 0 auto; gap: 3px; justify-items: end; }
+.stats-book-side strong { color: #46536a; font-size: 12.5px; font-weight: 620; font-variant-numeric: tabular-nums; }
+.stats-book-side span { color: #a2abb6; font-size: 10px; }
 .stats-panel { padding: 17px 18px; }
 .stats-panel-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .stats-panel-heading h2 { margin: 5px 0 0; color: #39465a; font-size: 14px; font-weight: 620; }
@@ -221,8 +381,13 @@ function bookMeta(row) {
 .stats-review-item span { color: #97a1ad; font-size: 12px; }
 .stats-panel-empty, .stats-panel-note { margin: 0; color: #9aa4b0; font-size: 12.5px; line-height: 1.65; }
 @media (max-width: 980px) {
-  .stats-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stats-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .stats-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-bar-chart { gap: 4px; }
+  .stats-bar-label { font-size: 9px; }
 }
 @media (max-width: 520px) {
   .stats-overview { grid-template-columns: minmax(0, 1fr); }

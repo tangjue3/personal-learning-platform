@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import TaskEditorDialog from './TaskEditorDialog.vue'
 import { getLocalRecord, getLocalRecords, localDataState, saveLocalRecord, deleteLocalRecord } from '../services/localDataStore.js'
+import { expandRepeatingEvents } from '../services/calendarRepeat.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
 const mode = ref('周')
@@ -75,6 +76,7 @@ function createEmptyDraft(date = focusDate.value) {
     end: '10:00',
     category: '学习',
     bookId: '',
+    repeat: 'none',
   }
 }
 
@@ -109,6 +111,7 @@ function normalizeStoredEvent(event, index) {
     end: event.end,
     category: categories.some((item) => item.label === event.category) ? event.category : '学习',
     bookId: typeof event.bookId === 'string' ? event.bookId : '',
+    repeat: ['daily', 'weekly'].includes(event.repeat) ? event.repeat : 'none',
   }
 }
 
@@ -190,6 +193,18 @@ async function refreshCalendarEvents() {
 watch(() => localDataState.events, refreshCalendarEvents, { deep: true, immediate: true })
 
 const sortedEvents = computed(() => [...calendarEvents.value].sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`, 'zh-CN')))
+/** 展示用的日程列表：原始日程 + 重复日程在当前周/月可视范围内的虚拟实例。 */
+const displayEvents = computed(() => {
+  const firstOfMonth = new Date(focusDate.value.getFullYear(), focusDate.value.getMonth(), 1)
+  const gridStart = new Date(firstOfMonth)
+  gridStart.setDate(gridStart.getDate() - ((gridStart.getDay() + 6) % 7))
+  const weekStart = startOfVisibleWeek.value
+  const start = weekStart < gridStart ? weekStart : gridStart
+  const cursor = new Date(start)
+  cursor.setDate(cursor.getDate() + 56)
+  return expandRepeatingEvents(calendarEvents.value, toDateKey(start), toDateKey(cursor))
+    .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`, 'zh-CN'))
+})
 const calendarTasks = computed(() => getLocalRecords('task'))
 const calendarTasksByDate = computed(() => {
   const groups = new Map()
@@ -213,14 +228,14 @@ const weekDays = computed(() => Array.from({ length: 7 }, (_, index) => {
     key,
     label: ['一', '二', '三', '四', '五', '六', '日'][index],
     isToday: key === todayKey.value,
-    events: sortedEvents.value.filter((event) => event.date === key),
+    events: displayEvents.value.filter((event) => event.date === key),
     taskCount: taskSummary.total,
     openTaskCount: taskSummary.open,
   }
 }))
 const weekEvents = computed(() => {
   const visibleDays = new Set(weekDays.value.map((day) => day.key))
-  return sortedEvents.value.filter((event) => visibleDays.has(event.date) && visibleOnWeek(event))
+  return displayEvents.value.filter((event) => visibleDays.has(event.date) && visibleOnWeek(event))
 })
 
 const monthDays = computed(() => {
@@ -238,7 +253,7 @@ const monthDays = computed(() => {
       inMonth: date.getMonth() === focusDate.value.getMonth(),
       isToday: key === todayKey.value,
       isSelected: key === toDateKey(focusDate.value),
-      events: sortedEvents.value.filter((event) => event.date === key),
+      events: displayEvents.value.filter((event) => event.date === key),
       taskCount: taskSummary.total,
       openTaskCount: taskSummary.open,
     }
@@ -302,7 +317,10 @@ function openNewEvent(date = focusDate.value) {
 }
 
 function openEditEvent(event) {
-  draft.value = { ...event }
+  // 重复日程的虚拟实例指回原始记录编辑，改的是整个系列。
+  const baseId = event.repeatOf ?? event.id
+  const base = calendarEvents.value.find((item) => String(item.id) === String(baseId))
+  draft.value = { ...(base || event) }
   draftBaseline = JSON.stringify(draft.value)
   formError.value = ''
   modalOpen.value = true
@@ -355,7 +373,9 @@ async function saveEvent() {
 }
 
 async function deleteEvent() {
-  if (formSaving.value || !window.confirm('确定删除这条日程吗？')) return
+  if (formSaving.value || !window.confirm(draft.value.repeat === 'daily' || draft.value.repeat === 'weekly'
+    ? '确定删除这条重复日程吗？整个系列都会被删除。'
+    : '确定删除这条日程吗？')) return
   formSaving.value = true
   try {
     await deleteLocalRecord('calendar', String(draft.value.id))
@@ -557,6 +577,8 @@ function eventGridRowEnd(event) {
           <label class="schedule-field"><span>开始时间</span><input v-model="draft.start" required type="time" step="1800" :disabled="formSaving" /></label>
           <label class="schedule-field"><span>结束时间</span><input v-model="draft.end" required type="time" step="1800" :disabled="formSaving" /></label>
           <label class="schedule-field schedule-field--full"><span>分类</span><select v-model="draft.category" :disabled="formSaving"><option v-for="category in categories" :key="category.label" :value="category.label">{{ category.label }}</option></select></label>
+          <label class="schedule-field schedule-field--full"><span>重复</span><select v-model="draft.repeat" :disabled="formSaving"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option></select></label>
+          <p v-if="draft.repeat === 'daily' || draft.repeat === 'weekly'" class="schedule-form-hint">重复日程会在日历中自动出现；修改或删除会影响整个系列。</p>
           <label class="schedule-field schedule-field--full"><span>关联学习书籍 <small>可选</small></span><select v-model="draft.bookId" :disabled="formSaving"><option value="">暂不关联</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label>
           <p v-if="formError" class="schedule-form-error" role="alert">{{ formError }}</p>
           <footer class="schedule-form-actions">
@@ -632,6 +654,7 @@ function eventGridRowEnd(event) {
 .schedule-field input, .schedule-field select { width: 100%; height: 39px; padding: 0 11px; border: 1px solid #e7ebf0; border-radius: 9px; color: #3e4a5c; background: #fbfcfd; font: inherit; font-size: 12.5px; }
 .schedule-field input:focus, .schedule-field select:focus { border-color: #a9c6f3; outline: 3px solid rgba(75,134,238,.12); }
 .schedule-form-error { grid-column: 1 / -1; margin: -3px 0 0; color: #bf6c61; font-size: 12px; }
+.schedule-form-hint { grid-column: 1 / -1; margin: -3px 0 0; color: #8d99a9; font-size: 11.5px; }
 .schedule-form-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 7px; padding-top: 16px; border-top: 1px solid #edf0f3; }
 .schedule-form-actions > div { display: flex; align-items: center; gap: 8px; }
 .schedule-form-actions .button { min-height: 35px; font-size: 12px; }

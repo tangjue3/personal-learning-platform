@@ -4,6 +4,7 @@ import BookCover from './BookCover.vue'
 import Icon from './Icon.vue'
 import TaskEditorDialog from './TaskEditorDialog.vue'
 import { deleteLocalRecord, getLocalRecord, getLocalRecords, saveLocalRecord } from '../services/localDataStore.js'
+import { expandRepeatingEvents } from '../services/calendarRepeat.js'
 import { isReviewDue } from '../services/reviewSchedule.js'
 
 const props = defineProps({ books: { type: Array, default: () => [] } })
@@ -32,7 +33,7 @@ const isFeaturedBookFavorite = computed(() => {
 const dashboardBooks = computed(() => [...props.books]
   .sort((a, b) => Number(Boolean(b.lastRead)) - Number(Boolean(a.lastRead)) || Number(b.progress || 0) - Number(a.progress || 0))
   .slice(0, 3))
-const events = computed(() => getLocalRecords('calendar')
+const events = computed(() => expandRepeatingEvents(getLocalRecords('calendar'), todayKey.value, todayKey.value)
   .filter((event) => event.date === todayKey.value)
   .sort((a, b) => String(a.start).localeCompare(String(b.start)))
   .map((event) => {
@@ -86,6 +87,38 @@ const studyStreak = computed(() => {
   return count
 })
 const daysThisWeek = computed(() => week.value.filter((day) => day.done).length)
+const goalEditing = ref(false)
+const goalDraft = ref({ readingMinutes: 30, reviewCards: 10 })
+const dailyGoal = computed(() => {
+  const record = getLocalRecord('preference', 'daily-goal')
+  return {
+    readingMinutes: Math.max(1, Number(record?.readingMinutes) || 30),
+    reviewCards: Math.max(1, Number(record?.reviewCards) || 10),
+  }
+})
+const todayReadingMinutes = computed(() => {
+  const record = getLocalRecord('preference', `reading-time-${todayKey.value}`)
+  return Math.round((Number(record?.totalSeconds) || 0) / 60)
+})
+const todayReviewedCount = computed(() => {
+  const record = getLocalRecord('preference', `review-stats-${todayKey.value}`)
+  return Number(record?.total) || 0
+})
+function goalPercent(done, target) {
+  return Math.min(100, Math.round((Number(done) || 0) / Math.max(1, target) * 100))
+}
+function startGoalEdit() {
+  goalDraft.value = { ...dailyGoal.value }
+  goalEditing.value = true
+}
+async function saveGoal() {
+  const readingMinutes = Math.min(600, Math.max(5, Math.round(Number(goalDraft.value.readingMinutes) || 30)))
+  const reviewCards = Math.min(200, Math.max(1, Math.round(Number(goalDraft.value.reviewCards) || 10)))
+  try {
+    await saveLocalRecord('preference', 'daily-goal', { readingMinutes, reviewCards })
+    goalEditing.value = false
+  } catch (error) { favoriteError.value = error.message }
+}
 const greeting = computed(() => {
   const hour = currentTime.value.getHours()
   return hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
@@ -192,6 +225,24 @@ async function toggleFeaturedFavorite() {
             <span>{{ day.label }}</span>
           </div>
         </div>
+        <div class="daily-goals">
+          <div class="daily-goal-row">
+            <span class="daily-goal-label"><Icon name="notes" size="13" /> 阅读</span>
+            <span class="daily-goal-track"><i :style="{ width: `${goalPercent(todayReadingMinutes, dailyGoal.readingMinutes)}%` }"></i></span>
+            <strong>{{ todayReadingMinutes }} / {{ dailyGoal.readingMinutes }} 分钟</strong>
+          </div>
+          <div class="daily-goal-row">
+            <span class="daily-goal-label"><Icon name="review" size="13" /> 复习</span>
+            <span class="daily-goal-track"><i :style="{ width: `${goalPercent(todayReviewedCount, dailyGoal.reviewCards)}%` }"></i></span>
+            <strong>{{ todayReviewedCount }} / {{ dailyGoal.reviewCards }} 张</strong>
+          </div>
+          <button type="button" class="daily-goal-edit" @click="goalEditing ? goalEditing = false : startGoalEdit()">{{ goalEditing ? '收起' : '调整目标' }}</button>
+          <div v-if="goalEditing" class="daily-goal-editor">
+            <label>阅读目标 · 分钟<input v-model.number="goalDraft.readingMinutes" type="number" min="5" max="600" /></label>
+            <label>复习目标 · 张<input v-model.number="goalDraft.reviewCards" type="number" min="1" max="200" /></label>
+            <button type="button" class="button button-primary" @click="saveGoal">保存目标</button>
+          </div>
+        </div>
         <div class="dashboard-review-prompt" :class="{ 'dashboard-review-prompt--ready': dueReviewCount, 'dashboard-review-prompt--empty': !dueReviewCount && !reviewCards.length }">
           <span class="dashboard-review-icon"><Icon name="review" size="16" /></span>
           <div class="dashboard-review-copy">
@@ -254,6 +305,18 @@ async function toggleFeaturedFavorite() {
 .no-book-card h2 { margin: 7px 0; color: #39475b; font-size: 16px; }
 .no-book-card p { max-width: 350px; margin: 0 0 13px; color: #8792a1; font-size: 12px; line-height: 1.7; }
 .favorite-feedback { margin: 8px 0 0; color: #9a7b72; font-size: 11px; }
+.daily-goals { display: grid; gap: 8px; margin: 15px 0 3px; padding: 12px 13px; border: 1px solid #eef1f5; border-radius: 12px; background: #fbfcfd; }
+.daily-goal-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.daily-goal-label { display: inline-flex; align-items: center; gap: 5px; color: #71809a; font-size: 11.5px; font-weight: 600; }
+.daily-goal-track { height: 8px; border-radius: 5px; background: #e9edf2; overflow: hidden; }
+.daily-goal-track i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9cc0e8, #5b8cc4); transition: width .3s ease; }
+.daily-goal-row strong { color: #5b6b80; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.daily-goal-edit { justify-self: start; padding: 0; border: 0; color: #7186a3; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.daily-goal-edit:hover { color: #426da8; }
+.daily-goal-editor { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; padding-top: 3px; }
+.daily-goal-editor label { display: grid; gap: 4px; color: #7d8b9e; font-size: 10.5px; }
+.daily-goal-editor input { width: 82px; box-sizing: border-box; padding: 6px 8px; border: 1px solid #e3e8ee; border-radius: 7px; outline: 0; color: #47566a; font: inherit; font-size: 12px; }
+.daily-goal-editor .button { min-height: 29px; font-size: 11px; }
 .dashboard-private-hint, .dashboard-empty-copy { padding: 14px 3px; color: #9aa4b1; font-size: 12px; line-height: 1.65; }
 .dashboard-private-setup { grid-column: 1 / -1; min-height: 132px; display: flex; align-items: center; gap: 16px; padding: 22px; }
 .dashboard-private-setup > div { min-width: 0; flex: 1; }
