@@ -152,7 +152,7 @@ async function toggleFeaturedFavorite() {
     <header class="page-heading dashboard-heading">
       <div>
         <div class="eyebrow-label"><Icon name="sun" size="15" /> {{ greeting }}</div>
-        <h1>今天</h1>
+        <h1>工作台</h1>
         <p>专注当下，积累每一次小小的进步。</p>
       </div>
       <div class="heading-side">

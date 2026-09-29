@@ -9,7 +9,6 @@ import ReaderView from './components/ReaderView.vue'
 import StatsView from './components/StatsView.vue'
 import SyncCenter from './components/SyncCenter.vue'
 import WorkspaceView from './components/WorkspaceView.vue'
-import WorkbenchView from './components/WorkbenchView.vue'
 import { listImportedBooks } from './services/libraryStore.js'
 import { listEbookFiles } from './services/ebookFileStore.js'
 import { listPendingEbooks, runEbookMigration } from './services/ebookMigration.js'
@@ -23,15 +22,13 @@ const currentPage = ref('today')
 const returnPage = ref('shelf')
 const activeBook = ref(null)
 const activeAnchor = ref(null)
-const workbenchView = ref(null)
 const globalSearchOpen = ref(false)
 const workspaceView = ref(null)
 const reviewClock = ref(Date.now())
 let reviewClockTimer = null
 
 const navigation = [
-  { id: 'today', label: '今天', icon: 'today' },
-  { id: 'workbench', label: '工作台', icon: 'grid' },
+  { id: 'today', label: '工作台', icon: 'grid' },
   { id: 'shelf', label: '书架', icon: 'shelf' },
   { id: 'calendar', label: '日历', icon: 'calendar' },
   { id: 'notes', label: '笔记', icon: 'notes' },
@@ -188,11 +185,6 @@ function openSearchNote(note) {
   currentPage.value = 'notes'
   nextTick(() => workspaceView.value?.focusNoteById(note.id))
 }
-
-function openSearchPage(pageId) {
-  currentPage.value = 'workbench'
-  nextTick(() => workbenchView.value?.focusPageById(pageId))
-}
 function handleGlobalShortcut(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault()
@@ -304,7 +296,7 @@ function returnFromReader() {
       <header class="app-topbar">
         <div class="topbar-context"><span class="context-dot"></span><span>我的空间</span><Icon name="chevronRight" size="14" /><span>{{ navigation.find((item) => item.id === currentPage)?.label || '学习空间' }}</span></div>
         <div class="topbar-actions">
-          <button class="global-search" aria-label="全局搜索" @click="openGlobalSearch"><Icon name="search" size="17" /><span>搜索课程、笔记与页面</span><kbd>{{ searchShortcut }}</kbd></button>
+          <button class="global-search" aria-label="全局搜索" @click="openGlobalSearch"><Icon name="search" size="17" /><span>搜索课程、章节与笔记</span><kbd>{{ searchShortcut }}</kbd></button>
           <SyncCenter />
           <span class="topbar-avatar" aria-hidden="true">知</span>
         </div>
@@ -312,7 +304,6 @@ function returnFromReader() {
 
       <div class="page-scroller">
         <DashboardView v-if="currentPage === 'today'" :books="books" @open-reader="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" @start-review="startReviewFromDashboard" @create-review-card="createReviewCardFromDashboard" />
-        <WorkbenchView v-else-if="currentPage === 'workbench'" ref="workbenchView" :books="books" @open-book="openBook" @open-calendar="navigate('calendar')" @open-shelf="navigate('shelf')" />
         <BookshelfView v-else-if="currentPage === 'shelf'" :books="books" :books-loading="booksLoading" @open-book="openBook" @book-imported="addBook" @book-removed="removeBook" />
         <CalendarView v-else-if="currentPage === 'calendar'" :books="books" />
         <WorkspaceView v-else-if="currentPage === 'notes' || currentPage === 'review'" ref="workspaceView" :kind="currentPage" :books="books" @open-note="openNoteLocation" />
@@ -323,7 +314,7 @@ function returnFromReader() {
     <EbookReaderView v-if="isReader && ['epub', 'pdf'].includes(activeBook?.format)" :key="activeBook?.id" :book="activeBook" :initial-anchor="activeAnchor" @back="returnFromReader" @progress="updateBookProgress" />
     <ReaderView v-else-if="isReader" :key="activeBook?.id" :book="activeBook || books[0]" :initial-anchor="activeAnchor" @back="returnFromReader" @progress="updateBookProgress" />
 
-    <GlobalSearchDialog v-model:open="globalSearchOpen" :books="books" @open-book="openBook" @open-note="openSearchNote" @open-page="openSearchPage" />
+    <GlobalSearchDialog v-model:open="globalSearchOpen" :books="books" @open-book="openBook" @open-note="openSearchNote" />
     <nav v-if="!isReader" class="mobile-navigation" aria-label="移动端主导航">
       <button v-for="item in navigation" :key="item.id" :class="{ active: activeNav === item.id }" :aria-label="item.label" :aria-current="activeNav === item.id ? 'page' : undefined" @click="navigate(item.id)"><Icon :name="item.icon" size="19" /><span>{{ item.label }}</span></button>
     </nav>

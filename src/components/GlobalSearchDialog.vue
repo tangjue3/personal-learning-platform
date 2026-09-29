@@ -4,7 +4,7 @@ import Icon from './Icon.vue'
 import { getLocalRecords } from '../services/localDataStore.js'
 
 const props = defineProps({ open: { type: Boolean, default: false }, books: { type: Array, default: () => [] } })
-const emit = defineEmits(['update:open', 'open-book', 'open-note', 'open-page'])
+const emit = defineEmits(['update:open', 'open-book', 'open-note'])
 const query = ref('')
 const searchTerm = ref('')
 const activeIndex = ref(0)
@@ -103,21 +103,6 @@ const results = computed(() => {
     })
   }
 
-  for (const page of getLocalRecords('workspace')) {
-    const content = [page.title, page.body].filter(Boolean).join(' ')
-    const index = content.toLocaleLowerCase('zh-CN').indexOf(term)
-    if (index < 0) continue
-    add({
-      key: 'page:' + page.id,
-      type: 'page',
-      title: page.title || '无标题页面',
-      source: '工作台',
-      excerpt: snippet(content, index, term),
-      rank: String(page.title || '').toLocaleLowerCase('zh-CN').includes(term) ? 1 : 2,
-      pageId: page.id,
-    })
-  }
-
   return matches.sort((a, b) => a.rank - b.rank).slice(0, 12)
 })
 watch(results, () => { activeIndex.value = 0 })
@@ -131,8 +116,7 @@ function choose(result) {
   restoreFocus.value = false
   emit('update:open', false)
   if (result.type === 'book' || result.type === 'chapter') emit('open-book', result.book, result.anchor || null)
-  else if (result.type === 'note') emit('open-note', result.note)
-  else emit('open-page', result.pageId)
+  else emit('open-note', result.note)
 }
 function chooseActive() {
   const result = results.value[activeIndex.value]
@@ -148,10 +132,10 @@ function trapTab(event) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
 }
 function iconName(result) {
-  return ({ book: 'shelf', chapter: 'notes', note: 'notes', page: 'grid' })[result.type] || 'search'
+  return ({ book: 'shelf', chapter: 'notes', note: 'notes' })[result.type] || 'search'
 }
 function kindLabel(result) {
-  return ({ book: '书籍', chapter: '章节', note: '笔记', page: '页面' })[result.type] || ''
+  return ({ book: '书籍', chapter: '章节', note: '笔记' })[result.type] || ''
 }
 </script>
 
@@ -160,7 +144,7 @@ function kindLabel(result) {
     <section ref="dialog" class="global-search-dialog" role="dialog" aria-modal="true" aria-label="全局搜索" @keydown.esc.stop.prevent="close" @keydown="trapTab">
       <header class="global-search-header">
         <Icon name="search" size="21" />
-        <input ref="field" v-model="query" type="search" placeholder="搜索书名、章节、笔记和工作台页面…" aria-label="搜索书籍、章节、笔记和工作台页面" autocomplete="off" @keydown.down.prevent="moveSelection(1)" @keydown.up.prevent="moveSelection(-1)" @keydown.enter.prevent="chooseActive" />
+        <input ref="field" v-model="query" type="search" placeholder="搜索书名、章节和笔记…" aria-label="搜索书籍、章节和笔记" autocomplete="off" @keydown.down.prevent="moveSelection(1)" @keydown.up.prevent="moveSelection(-1)" @keydown.enter.prevent="chooseActive" />
         <button type="button" class="global-search-close" aria-label="关闭搜索" @click="close"><kbd>Esc</kbd><Icon name="close" size="16" /></button>
       </header>
       <div v-if="searchTerm && results.length" class="global-search-results" role="listbox" aria-label="搜索结果" :aria-activedescendant="'global-result-' + activeIndex">
@@ -171,7 +155,7 @@ function kindLabel(result) {
         </button>
       </div>
       <div v-else-if="searchTerm" class="global-search-empty"><span><Icon name="search" size="18" /></span><strong>没有找到匹配内容</strong><p>试试书名、章节标题或笔记里的关键词。</p></div>
-      <div v-else class="global-search-hint"><span class="global-search-hint-icon"><Icon name="sparkles" size="18" /></span><div><strong>从一个关键词开始</strong><p>搜索课程章节、私人笔记和工作台页面。内容只在本机查找。</p></div><kbd>↑ ↓ 选择 · Enter 打开</kbd></div>
+      <div v-else class="global-search-hint"><span class="global-search-hint-icon"><Icon name="sparkles" size="18" /></span><div><strong>从一个关键词开始</strong><p>搜索课程章节和私人笔记。内容只在本机查找。</p></div><kbd>↑ ↓ 选择 · Enter 打开</kbd></div>
       <footer class="global-search-footer"><span>知序 · 全局搜索</span><span>{{ results.length ? '共显示 ' + results.length + ' 条' : 'Esc 关闭' }}</span></footer>
     </section>
   </div>
