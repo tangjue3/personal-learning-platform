@@ -54,14 +54,7 @@ const dueReviewCount = computed(() => {
 
 watch(() => localDataState.events, updatePrivateProgress, { deep: true })
 
-const themePreference = ref(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
 const booksLoading = ref(true)
-
-function toggleTheme() {
-  themePreference.value = themePreference.value === 'dark' ? 'light' : 'dark'
-  document.documentElement.dataset.theme = themePreference.value
-  localStorage.setItem('zhixu-theme', themePreference.value)
-}
 
 onMounted(async () => {
   reviewClockTimer = window.setInterval(() => { reviewClock.value = Date.now() }, 30_000)
@@ -312,7 +305,6 @@ function returnFromReader() {
         <div class="topbar-context"><span class="context-dot"></span><span>我的空间</span><Icon name="chevronRight" size="14" /><span>{{ navigation.find((item) => item.id === currentPage)?.label || '学习空间' }}</span></div>
         <div class="topbar-actions">
           <button class="global-search" aria-label="全局搜索" @click="openGlobalSearch"><Icon name="search" size="17" /><span>搜索课程、笔记与页面</span><kbd>{{ searchShortcut }}</kbd></button>
-          <button class="icon-button" :aria-label="themePreference === 'dark' ? '切换到浅色模式' : '切换到深色模式'" :aria-pressed="themePreference === 'dark'" @click="toggleTheme"><Icon :name="themePreference === 'dark' ? 'sun' : 'moon'" size="18" /></button>
           <SyncCenter />
           <span class="topbar-avatar" aria-hidden="true">知</span>
         </div>
