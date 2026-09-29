@@ -353,7 +353,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .app-shell--reader { display: block; overflow: auto; background: #f6f6f5; }
 .reader-page { min-height: 100vh; color: #2e3745; background: #fafaf9; transition: background .25s ease; }
 .reader-page--sepia { background: #f5f0e7; }
-.reader-topbar { height: 61px; display: grid; grid-template-columns: 1fr minmax(400px, 1.4fr) 1fr; align-items: center; gap: 20px; padding: 0 27px; border-bottom: 1px solid #eceeed; background: rgba(255,255,255,.72); }
+.reader-topbar { position: sticky; top: 0; z-index: 60; height: 61px; display: grid; grid-template-columns: 1fr minmax(400px, 1.4fr) 1fr; align-items: center; gap: 20px; padding: 0 27px; border-bottom: 1px solid #eceeed; background: rgba(255,255,255,.93); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
 .reader-book-back { display: inline-flex; align-items: center; gap: 8px; justify-self: start; padding: 7px 9px; border: 0; border-radius: 8px; color: #858f9d; background: transparent; font-size: 12px; cursor: pointer; }
 .reader-book-back:hover { color: #4e7fc6; background: #f0f5fb; }
 .reader-book-name { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 9px; color: #5c6879; }

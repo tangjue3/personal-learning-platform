@@ -432,6 +432,7 @@ function renderMarkdown(markdown, title = '', context = {}) {
   let quoteLines = []
   let codeLines = null
   let codeLanguage = ''
+  let fenceMark = ''
   let skippedTitle = false
 
   const flushParagraph = () => {
@@ -489,8 +490,12 @@ function renderMarkdown(markdown, title = '', context = {}) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
-    const fence = line.match(/^\s*```([\w+-]*)\s*$/)
-    if (fence) {
+    // 支持反引号与波浪线两种围栏；闭合必须使用同一种标记，
+    // 避免正文里的 `~~~` 被当成代码块边界。
+    const fence = codeLines
+      ? line.match(/^\s*(`{3,}|~{3,})\s*$/)
+      : line.match(/^\s*(`{3,}|~{3,})([\w+-]*)\s*$/)
+    if (fence && (!codeLines || fence[1][0] === fenceMark)) {
       flushQuote()
       flushParagraph()
       closeList()
@@ -500,9 +505,11 @@ function renderMarkdown(markdown, title = '', context = {}) {
         output.push(`<pre><code class="${highlighted ? 'hljs ' : ''}${codeLanguage ? `language-${escapeHtml(codeLanguage)}` : ''}">${highlighted || escapeHtml(code)}</code></pre>`)
         codeLines = null
         codeLanguage = ''
+        fenceMark = ''
       } else {
         codeLines = []
-        codeLanguage = fence[1]
+        codeLanguage = fence[2]
+        fenceMark = fence[1][0]
       }
       continue
     }
@@ -585,6 +592,9 @@ function renderMarkdown(markdown, title = '', context = {}) {
     const code = codeLines.join('\n')
     const highlighted = highlightToHtml(code, codeLanguage)
     output.push(`<pre><code class="${highlighted ? 'hljs' : ''}">${highlighted || escapeHtml(code)}</code></pre>`)
+    codeLines = null
+    codeLanguage = ''
+    fenceMark = ''
   }
   return output.join('\n') || '<p>这个章节还没有内容。</p>'
 }
